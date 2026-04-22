@@ -1,11 +1,66 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: var(--font-jost), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-overpass-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+
+  --color-primary: #c800df;
+  --color-secondary: #e60076;
+  --color-background: #0a0a0b;
+
+  --radius-bento: 24px;
+  --radius-bento-lg: 32px;
+}
 
 :root {
-  --background: #0f172a;
+  --background: #0a0a0b;
   --foreground: #f8fafc;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
+  font-family: var(--font-jost), sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: white; /* Màu chữ */
+    -webkit-box-shadow: 0 0 0px 1000px #221219 inset; /* Màu nền đè lên */
+    transition: background-color 5000s ease-in-out 0s;
+  }
+}
+
+@layer components {
+  .glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .text-gradient {
+    background: linear-gradient(to right, #c800df, #e60076);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
 }

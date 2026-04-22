@@ -1,20 +1,23 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Jost, Overpass_Mono } from 'next/font/google';
+import './globals.css';
+import Footer from '../components/Footer';
+import { Toaster } from 'sonner';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const jost = Jost({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-jost',
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const overpassMono = Overpass_Mono({
+  subsets: ['latin', 'latin-ext'],
+  variable: '--font-overpass-mono',
 });
 
 export const metadata: Metadata = {
-  title: "We Watch",
-  description: "Watch together, no matter the distance.",
+  title: 'We Watch | Social Entertainment Space',
+  description:
+    'Synchronized digital content watching with real-time interaction.',
 };
 
 export default function RootLayout({
@@ -25,9 +28,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${jost.variable} ${overpassMono.variable} text-slate-200 antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-screen flex-col overflow-x-hidden bg-[#0A0A0B] font-sans">
+        <main className="flex-1">{children}</main>
+        <Footer />
+        <Toaster theme="dark" richColors position="top-right" />
+      </body>
     </html>
   );
 }
