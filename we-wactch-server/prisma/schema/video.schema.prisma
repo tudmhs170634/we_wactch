@@ -1,0 +1,13 @@
+model Video {
+  id           String   @id @default(uuid()) @db.Uuid
+  title        String
+  description  String?
+  videoUrl     String
+  thumbnailUrl String?
+  duration     Float
+  size         BigInt
+  ownerId      String   @db.Uuid
+  owner        User     @relation("UserVideos", fields: [ownerId], references: [id], onDelete: Cascade)
+  rooms        Room[]   @relation("VideoInRooms")
+  createdAt    DateTime @default(now())
+}

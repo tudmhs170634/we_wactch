@@ -1,32 +1,15 @@
-import { NestFactory, Reflector } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import 'dotenv/config';
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
-async function bootstrap(): Promise<void> {
-  const logger = new Logger('Bootstrap');
+async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // ── Global prefix ──────────────────────────────────────────────────────────
-  app.setGlobalPrefix('api/v1');
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
-  // ── CORS ───────────────────────────────────────────────────────────────────
-  app.enableCors({
-    origin: process.env.CLIENT_ORIGIN ?? '*',
-    credentials: true,
-  });
-
-  // ── Validation pipe ────────────────────────────────────────────────────────
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,          // strip unknown properties
-      forbidNonWhitelisted: true,
-      transform: true,          // auto-cast primitive types
-    }),
-  );
-
-  const port = process.env.PORT ?? 3000;
-  await app.listen(port);
-  logger.log(`🚀 We Watch 2.0 running at http://localhost:${port}/api/v1`);
+  await app.listen(process.env.PORT ?? 3000);
 }
 
 bootstrap();
+
