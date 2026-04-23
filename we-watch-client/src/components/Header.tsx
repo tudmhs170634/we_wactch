@@ -15,6 +15,7 @@ import {
   Bell,
   Menu,
   X,
+  Settings,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 
@@ -25,6 +26,7 @@ const Header = () => {
     logout: logoutStore,
     isAuthenticated,
   } = useAuthStore();
+
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -35,6 +37,7 @@ const Header = () => {
     email: 'nguyenthetrunq@gmail.com',
     avatarUrl:
       'https://i.pinimg.com/736x/2b/f0/b0/2bf0b0feecc5c890ea47f90c7c7c775d.jpg',
+    role: 'admin',
   };
 
   const user = realUser || mockUser;
@@ -46,6 +49,8 @@ const Header = () => {
         setIsMenuOpen(false);
       }
     };
+    console.log('realUser', realUser);
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -77,7 +82,7 @@ const Header = () => {
             Trang chủ
           </Link>
           <Link href="/videos" className="hover:text-primary transition-colors">
-            Videos
+            Video
           </Link>
           <Link href="/rooms" className="hover:text-primary transition-colors">
             Phòng
@@ -99,7 +104,7 @@ const Header = () => {
               </button>
 
               <Link
-                href="/login"
+                href="/rooms"
                 className="bg-primary shadow-primary/20 flex items-center gap-2 rounded-full px-6 py-2 text-sm font-bold text-white shadow-lg transition-all hover:scale-105"
               >
                 <PlusSquare size={16} />
@@ -162,11 +167,21 @@ const Header = () => {
                           Hồ sơ của tôi
                         </Link>
 
+                        {user?.role === 'admin' && (
+                          <Link
+                            href="/admin"
+                            onClick={() => setIsMenuOpen(false)}
+                            className="mt-1 flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-white/70 transition-all hover:bg-white/5 hover:text-white"
+                          >
+                            <Settings size={18} className="text-[#C800DF]" />
+                            Bảng điều khiển
+                          </Link>
+                        )}
+
                         <button
                           onClick={() => {
                             setIsMenuOpen(false);
-                            logoutStore();
-                            router.push('/');
+                            logout();
                           }}
                           className="mt-1 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-red-400 transition-all hover:bg-red-500/10 hover:text-red-500"
                         >

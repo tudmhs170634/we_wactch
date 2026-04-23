@@ -41,18 +41,17 @@ export const register = async (credentials: RegisterCredentials): Promise<Regist
 
 /**
  * Đăng xuất và dọn dẹp bộ nhớ client
+ * Dọn dẹp state ngay lập tức để không gây khựng UI,
+ * sau đó fire-and-forget API call lên backend.
  */
-export const logout = async (): Promise<void> => {
-  try {
-    await api.post('/auth/logout');
-  } catch (error) {
-    console.error('Logout API error:', error);
-  } finally {
-    useAuthStore.getState().logout();
-    
-    localStorage.removeItem('access_token');
-    
-    delete api.defaults.headers.common['Authorization'];
-    window.location.href = '/login';
-  }
+export const logout = (): void => {
+  useAuthStore.getState().logout();
+  localStorage.removeItem('token');
+  delete api.defaults.headers.common['Authorization'];
+
+  window.location.href = '/';
+
+  api.post('/auth/logout').catch(() => {
+  });
 };
+

@@ -18,8 +18,11 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
 
-      login: (user, token) => {
+      login: (user: UserResponse, token: string) => {
         Cookies.set('token', token, { expires: 7, path: '/' });
+        if (user.role) {
+          Cookies.set('user_role', user.role, { expires: 7, path: '/' });
+        }
         set({
           user,
           token,
@@ -29,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         Cookies.remove('token', { path: '/' });
+        Cookies.remove('user_role', { path: '/' });
         set({
           user: null,
           token: null,

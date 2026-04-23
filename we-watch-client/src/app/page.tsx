@@ -15,8 +15,7 @@ import {
 } from '../constants/mockData';
 
 export default function HomePage() {
-  //const { isAuthenticated } = useAuthStore();
-  const isAuthenticated = true;
+  const { isAuthenticated } = useAuthStore();
 
   return (
     <main className="relative min-h-screen font-sans text-slate-100">

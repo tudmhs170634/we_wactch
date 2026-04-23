@@ -30,14 +30,22 @@ const AuthForm: React.FC<AuthFormProps> = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl');
+  const { login: setAuth, isAuthenticated } = useAuthStore();
 
-  const setAuth = useAuthStore((state) => state.login);
+  React.useEffect(() => {
+    // Xử lý trường hợp Zustand hydrate xong và user đã đăng nhập sẵn
+    if (isAuthenticated) {
+      window.location.href = callbackUrl || '/';
+    }
+    // Chỉ chạy 1 lần sau khi hydrate xong
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('test@test.com');
+  const [password, setPassword] = useState('123456789');
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(AVATARS[0]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -75,33 +83,35 @@ const AuthForm: React.FC<AuthFormProps> = ({
       }
     }
 
+    setIsLoading(true);
+    const minLoadingTime = new Promise((resolve) => setTimeout(resolve, 2000));
+
     try {
-      const minLoadingTime = new Promise((resolve) =>
-        setTimeout(resolve, 2000)
-      );
-
-      setIsLoading(true);
-
       if (isLogin) {
         const res = await login({ email, password });
-
+        console.log('Login response:', res);
         await minLoadingTime;
         setAuth(res.user, res.token);
-        toast.success(`Chào mừng trở lại, ${res.user?.username}!`);
-        router.push(callbackUrl || '/');
+        toast.success(`Chào mừng trở lại, ${res?.user?.username}!`);
+
+        const destination =
+          res.user.role === 'admin' ? '/admin' : callbackUrl || '/';
+        // Dùng hard navigation để đảm bảo cookie được gửi đúng lên proxy middleware
+        window.location.href = destination;
       } else {
         const res = await register({ email, username, password, avatarUrl });
+        console.log('Auto-login response:', res);
         await minLoadingTime;
-        setIsLogin(true);
-        setPassword('');
-        setErrorMsg('Đăng ký thành công! Vui lòng đăng nhập lại.');
-        router.push('/login');
+        setAuth(res.user, res.token);
+        toast.success(`Đăng ký thành công! Chào mừng ${res.user.username}`);
+        // Hard navigation để cookie được commit trước khi proxy đọc
+        window.location.href = callbackUrl || '/';
       }
     } catch (error: any) {
+      await minLoadingTime;
       setErrorMsg(
-        error?.response?.data?.message || isLogin
-          ? 'Đăng nhập thất bại'
-          : 'Đăng ký thất bại'
+        error?.response?.data?.message ||
+          (isLogin ? 'Đăng nhập thất bại' : 'Đăng ký thất bại')
       );
     } finally {
       setIsLoading(false);

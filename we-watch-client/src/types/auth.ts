@@ -1,10 +1,11 @@
 export interface UserResponse {
-  id: string;
   email: string;
   username: string;
   avatarUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
+  isHost?: boolean;
+  role?: string;
 }
 
 export interface LoginResponse {
@@ -12,7 +13,10 @@ export interface LoginResponse {
   token: string;
 }
 
-export type RegisterResponse = UserResponse;
+export type RegisterResponse = {
+  user: UserResponse;
+  token: string;
+};
 
 export interface LoginCredentials {
   email: string;

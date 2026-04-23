@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { toast } from 'sonner';
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: process.env.BASE_URL || 'http://localhost:3000',
 });
 
 api.interceptors.request.use((config) => {
