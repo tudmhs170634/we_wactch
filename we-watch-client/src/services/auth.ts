@@ -17,6 +17,8 @@ export const login = async (credentials: LoginCredentials): Promise<LoginRespons
     return data;
   } catch (error: any) {
     const errorMessage = error.response?.data?.message || 'Login failed';
+    console.log(`Data:`, credentials);
+            console.log('🚀 ~ handleSubmit ~ res:', error);
     throw new Error(errorMessage);
   }
 };
@@ -31,6 +33,8 @@ export const register = async (credentials: RegisterCredentials): Promise<Regist
     return data;
   } catch (error: any) {
     const errorMessage = error.response?.data?.message || 'Register failed';
+    console.log(`Data:`, credentials);
+    console.log('🚀 ~ handleSubmit ~ res:', error);
     throw new Error(errorMessage);
   }
 };

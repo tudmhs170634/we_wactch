@@ -14,7 +14,9 @@ import {
 import { AVATARS } from './AvatarServer';
 import { login, register } from '../services/auth';
 import { useAuthStore } from '../store/useAuthStore';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import Background from './layout/Background';
+import { toast } from 'sonner';
 
 interface AuthFormProps {
   initialMode?: 'login' | 'register';
@@ -26,6 +28,8 @@ const AuthForm: React.FC<AuthFormProps> = ({
   avatarNode,
 }) => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get('callbackUrl');
 
   const setAuth = useAuthStore((state) => state.login);
 
@@ -55,6 +59,10 @@ const AuthForm: React.FC<AuthFormProps> = ({
         setErrorMsg('Vui lòng nhập đầy đủ email và mật khẩu');
         return;
       }
+      if (password.length < 6) {
+        setErrorMsg('Mật khẩu phải có ít nhất 6 ký tự');
+        return;
+      }
     } else {
       if (!email || !username || !password) {
         setErrorMsg('Vui lòng nhập đầy đủ thông tin đăng ký');
@@ -76,19 +84,24 @@ const AuthForm: React.FC<AuthFormProps> = ({
 
       if (isLogin) {
         const res = await login({ email, password });
+
         await minLoadingTime;
         setAuth(res.user, res.token);
-        router.push('/');
+        toast.success(`Chào mừng trở lại, ${res.user?.username}!`);
+        router.push(callbackUrl || '/');
       } else {
-        await register({ email, username, password, avatarUrl });
+        const res = await register({ email, username, password, avatarUrl });
         await minLoadingTime;
         setIsLogin(true);
         setPassword('');
-        setErrorMsg('Đăng ký thành công! Vui lòng đăng nhập.');
+        setErrorMsg('Đăng ký thành công! Vui lòng đăng nhập lại.');
+        router.push('/login');
       }
     } catch (error: any) {
       setErrorMsg(
-        error?.response?.data?.message || 'Thông tin không chính xác'
+        error?.response?.data?.message || isLogin
+          ? 'Đăng nhập thất bại'
+          : 'Đăng ký thất bại'
       );
     } finally {
       setIsLoading(false);
@@ -96,7 +109,8 @@ const AuthForm: React.FC<AuthFormProps> = ({
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A0B] font-['Jost'] text-slate-200">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A0B] font-sans text-slate-200">
+      <Background />
       <div className="absolute inset-0 z-0">
         <motion.div
           animate={{ scale: [1, 1.05, 1] }}
@@ -165,6 +179,7 @@ const AuthForm: React.FC<AuthFormProps> = ({
                   >
                     <div className="flex flex-row items-center justify-between">
                       <button
+                        type="button"
                         onClick={() => router.push('/')}
                         className="text-white/70 hover:text-white"
                       >
@@ -205,7 +220,6 @@ const AuthForm: React.FC<AuthFormProps> = ({
                         <div className="group/input relative">
                           <User className="group-focus-within/input:text-primary absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-white/40 transition-colors" />
                           <input
-                            required
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
@@ -226,7 +240,6 @@ const AuthForm: React.FC<AuthFormProps> = ({
                       <div className="group/input relative">
                         <Mail className="group-focus-within/input:text-primary absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-white/40 transition-colors" />
                         <input
-                          required
                           type="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
@@ -247,7 +260,6 @@ const AuthForm: React.FC<AuthFormProps> = ({
                       <div className="group/input relative">
                         <Lock className="group-focus-within/input:text-primary absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-white/40 transition-colors" />
                         <input
-                          required
                           type={showPassword ? 'text' : 'password'}
                           placeholder="Mật khẩu"
                           value={password}

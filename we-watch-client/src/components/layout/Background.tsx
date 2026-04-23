@@ -4,7 +4,7 @@ const Background = () => {
       <div
         className="pointer-events-none fixed inset-0 z-0"
         style={{
-          backgroundImage: "url('/background.jpg')",
+          backgroundImage: "url('/background.png')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',

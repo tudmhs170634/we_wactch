@@ -21,14 +21,12 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Determine the error message
     const message =
       error.response?.data?.message ||
       error.response?.data?.error ||
       error.message ||
       'An unexpected error occurred';
 
-    // Handle authentication errors
     if (error.response?.status === 401) {
       toast.error('Session expired. Please log in again.');
       useAuthStore.getState().logout();
@@ -36,7 +34,6 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     } else {
-      // General global error notification
       toast.error(message);
     }
     

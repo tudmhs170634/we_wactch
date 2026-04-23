@@ -1,13 +1,27 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowRight, Check, Search } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 
 const Hero = () => {
   const { isAuthenticated } = useAuthStore();
+  const router = useRouter();
+  const [searchText, setSearchText] = useState('');
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchText.trim();
+    if (!q) {
+      router.push('/videos');
+      return;
+    }
+    router.push(`/videos?search=${encodeURIComponent(q)}`);
+  };
 
   return (
     <motion.section
@@ -36,29 +50,37 @@ const Hero = () => {
         đâu.
       </motion.p>
 
-      <motion.div
+      <motion.form
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, delay: 0.3 }}
         className="group relative mt-12 w-full max-w-2xl"
+        onSubmit={handleSearch}
       >
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-6">
           <Search className="h-5 w-5 text-white/90 transition-colors group-focus-within:text-[#C800DF]" />
         </div>
         <input
           type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
           placeholder="Tìm kiếm phòng, phim, bạn bè..."
           className="glass placeholder-white-500 hidden w-full rounded-full py-4 pr-32 pl-14 text-lg text-white shadow-xl transition-all outline-none focus:border-[#C800DF]/50 focus:bg-white/10 md:block"
         />
         <input
           type="text"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
           placeholder="Tìm kiếm phòng..."
           className="glass placeholder-white-500 w-full rounded-full py-4 pr-32 pl-14 text-lg text-white shadow-xl transition-all outline-none focus:border-[#C800DF]/50 focus:bg-white/10 md:hidden"
         />
-        <button className="bg-primary shadow-primary/20 absolute inset-y-2 right-2 cursor-pointer rounded-full px-6 text-xs font-bold text-white shadow-lg transition-transform hover:scale-105">
+        <button
+          type="submit"
+          className="bg-primary shadow-primary/20 absolute inset-y-2 right-2 cursor-pointer rounded-full px-6 text-xs font-bold text-white shadow-lg transition-transform hover:scale-105"
+        >
           <Search className="text-white-400 h-5 w-5 transition-colors" />
         </button>
-      </motion.div>
+      </motion.form>
 
       <motion.div
         initial={{ opacity: 0, y: 40 }}
@@ -73,6 +95,7 @@ const Hero = () => {
               src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSKQ8GIEPZq9eTqgPvdjNzNXqgJ8OsHIJrA8w&s"
               alt="We Watch Mode background"
               fill
+              sizes="(max-width: 768px) 100vw, 50vw"
               className="object-cover opacity-70 transition-all duration-700 group-hover:scale-105 group-hover:opacity-100"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0B] via-[#0A0A0B]/60 to-transparent" />
@@ -124,6 +147,7 @@ const Hero = () => {
               src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&q=80"
               alt="Community Mode background"
               fill
+              sizes="(max-width: 768px) 100vw, 50vw"
               className="object-cover opacity-70 transition-all duration-700 group-hover:scale-105 group-hover:opacity-100"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0B] via-[#0A0A0B]/60 to-transparent" />

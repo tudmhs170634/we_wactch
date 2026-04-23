@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 interface Room {
   id: number;
@@ -18,9 +19,10 @@ interface Room {
 
 interface RoomListProps {
   rooms: Room[];
+  isAuthenticated?: boolean;
 }
 
-const RoomList = ({ rooms }: RoomListProps) => {
+const RoomList = ({ rooms, isAuthenticated = true }: RoomListProps) => {
   const [activeTab, setActiveTab] = useState<'community' | 'private'>('community');
 
   const filteredRooms = rooms.filter((r) =>
@@ -76,6 +78,15 @@ const RoomList = ({ rooms }: RoomListProps) => {
             whileHover={{ y: -5 }}
             className="glass group hover:border-primary/30 relative rounded-[24px] border border-white/5 p-6 transition-all"
           >
+            <Link
+              href={
+                isAuthenticated
+                  ? `/rooms?type=${room.isPrivate ? 'private' : 'community'}`
+                  : '/login'
+              }
+              className="absolute inset-0 z-10"
+              aria-label={`Vào phòng: ${room.title}`}
+            />
             <div className="flex items-start gap-4 pt-5">
               <div className="relative h-14 w-14 flex-shrink-0">
                 <Image
@@ -126,16 +137,20 @@ const RoomList = ({ rooms }: RoomListProps) => {
           </motion.div>
         ))}
 
-        <motion.div
-           whileHover={{ y: -5 }}
-           className="glass group hover:border-primary/30 relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center gap-4 rounded-[24px] border border-white/5 p-6 transition-all"
-         >
-           <div className="group-hover:bg-primary/20 flex h-14 w-14 items-center justify-center rounded-full bg-white/10 transition">
-             <ArrowRight className="h-6 w-6 text-white transition-transform group-hover:translate-x-1" />
-           </div>
-           <span className="group-hover:text-primary text-base font-bold text-white transition">Xem tất cả</span>
-           <span className="text-xs text-white/50">{filteredRooms.length} phòng</span>
-         </motion.div>
+        <motion.div whileHover={{ y: -5 }}>
+          <Link
+            href={isAuthenticated ? `/rooms?type=${activeTab}` : '/login'}
+            className="glass group hover:border-primary/30 relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center gap-4 rounded-[24px] border border-white/5 p-6 transition-all"
+          >
+            <div className="group-hover:bg-primary/20 flex h-14 w-14 items-center justify-center rounded-full bg-white/10 transition">
+              <ArrowRight className="h-6 w-6 text-white transition-transform group-hover:translate-x-1" />
+            </div>
+            <span className="group-hover:text-primary text-base font-bold text-white transition">
+              Xem tất cả
+            </span>
+            <span className="text-xs text-white/50">{filteredRooms.length} phòng</span>
+          </Link>
+        </motion.div>
       </div>
     </motion.section>
   );
