@@ -4,7 +4,7 @@ const Background = () => {
       <div
         className="pointer-events-none fixed inset-0 z-0"
         style={{
-          backgroundImage: "url('/background.png')",
+          backgroundImage: "url('https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045436/wewatch/assets/background.webp')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',

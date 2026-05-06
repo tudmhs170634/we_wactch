@@ -4,15 +4,15 @@ import React from 'react';
 import Image from 'next/image';
 
 export const AVATARS = [
-  'https://i.pinimg.com/736x/dd/cc/1e/ddcc1e5c98cf8b45e507a222ab63537c.jpg',
-  'https://i.pinimg.com/736x/2b/f0/b0/2bf0b0feecc5c890ea47f90c7c7c775d.jpg',
-  'https://i.pinimg.com/1200x/2a/d4/51/2ad451fd301c0efa4164f8f8cf5528d4.jpg',
-  'https://i.pinimg.com/1200x/b3/a9/e9/b3a9e93c366f9fdfec0f39567533814c.jpg',
-  'https://i.pinimg.com/736x/95/44/3f/95443f626f10db8be67483bb85f64946.jpg',
-  'https://i.pinimg.com/736x/58/66/f3/5866f3697f115723ae5106ab6179c26e.jpg',
-  'https://i.pinimg.com/736x/57/6c/a1/576ca16ccb0c131e2558bc863eba14cd.jpg',
-  'https://i.pinimg.com/736x/23/86/0d/23860d1322543caa8539bad1e8f73763.jpg',
-  'https://i.pinimg.com/1200x/20/ca/cb/20cacbd63df6c4a6c8aec0a34b29276f.jpg',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045397/wewatch/avatars/avatar_1.webp',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045398/wewatch/avatars/avatar_2.webp',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045399/wewatch/avatars/avatar_3.webp',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045401/wewatch/avatars/avatar_4.webp',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045402/wewatch/avatars/avatar_5.webp',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045402/wewatch/avatars/avatar_6.webp',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045403/wewatch/avatars/avatar_7.webp',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045404/wewatch/avatars/avatar_8.webp',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045405/wewatch/avatars/avatar_9.webp',
 ];
 
 interface AvatarServerProps {

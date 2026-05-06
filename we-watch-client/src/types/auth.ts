@@ -10,12 +10,12 @@ export interface UserResponse {
 
 export interface LoginResponse {
   user: UserResponse;
-  token: string;
+  accessToken: string;
 }
 
 export type RegisterResponse = {
   user: UserResponse;
-  token: string;
+  accessToken: string;
 };
 
 export interface LoginCredentials {
@@ -27,5 +27,6 @@ export interface RegisterCredentials {
   email: string;
   username: string;
   password: string;
-  avatarUrl: string;
+  avatarUrl?: string;
+  avatarPublicId?: string;
 }

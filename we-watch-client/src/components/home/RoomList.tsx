@@ -23,7 +23,9 @@ interface RoomListProps {
 }
 
 const RoomList = ({ rooms, isAuthenticated = true }: RoomListProps) => {
-  const [activeTab, setActiveTab] = useState<'community' | 'private'>('community');
+  const [activeTab, setActiveTab] = useState<'community' | 'private'>(
+    'community'
+  );
 
   const filteredRooms = rooms.filter((r) =>
     activeTab === 'community' ? !r.isPrivate : r.isPrivate
@@ -107,8 +109,17 @@ const RoomList = ({ rooms, isAuthenticated = true }: RoomListProps) => {
             <div className="mt-6 flex items-center justify-between">
               <div className="flex -space-x-2">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-900 bg-slate-800">
-                    <Image src={`https://i.pravatar.cc/100?u=${i + room.id}`} alt="user" width={24} height={24} className="rounded-full" />
+                  <div
+                    key={i}
+                    className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-900 bg-slate-800"
+                  >
+                    <Image
+                      src={`https://i.pravatar.cc/100?u=${i + room.id}`}
+                      alt="user"
+                      width={24}
+                      height={24}
+                      className="rounded-full"
+                    />
                   </div>
                 ))}
                 <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-900 bg-white/10 text-[8px] font-black">
@@ -121,15 +132,23 @@ const RoomList = ({ rooms, isAuthenticated = true }: RoomListProps) => {
             </div>
 
             <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-6">
-              <span className="text-lg font-bold text-white/50 transition-all group-hover:text-white">Xem cùng</span>
-              <motion.button whileTap={{ scale: 0.9 }} className="group-hover:bg-primary flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 transition-all group-hover:text-white">
+              <span className="text-lg font-bold text-white/50 transition-all group-hover:text-white">
+                Xem cùng
+              </span>
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                className="group-hover:bg-primary flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 transition-all group-hover:text-white"
+              >
                 <ArrowRight className="h-5 w-5" />
               </motion.button>
             </div>
 
             <div className="absolute top-4 right-4 flex gap-1">
               {room.tags.map((tag) => (
-                <span key={tag} className="group-hover:border-primary/20 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-black tracking-widest text-white/90 uppercase transition-all">
+                <span
+                  key={tag}
+                  className="group-hover:border-primary/20 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-black tracking-widest text-white/90 uppercase transition-all"
+                >
                   {tag}
                 </span>
               ))}
@@ -140,7 +159,7 @@ const RoomList = ({ rooms, isAuthenticated = true }: RoomListProps) => {
         <motion.div whileHover={{ y: -5 }}>
           <Link
             href={isAuthenticated ? `/rooms?type=${activeTab}` : '/login'}
-            className="glass group hover:border-primary/30 relative flex min-h-[220px] cursor-pointer flex-col items-center justify-center gap-4 rounded-[24px] border border-white/5 p-6 transition-all"
+            className="glass group hover:border-primary/30 relative flex min-h-full cursor-pointer flex-col items-center justify-center gap-4 rounded-[24px] border border-white/5 p-6 transition-all"
           >
             <div className="group-hover:bg-primary/20 flex h-14 w-14 items-center justify-center rounded-full bg-white/10 transition">
               <ArrowRight className="h-6 w-6 text-white transition-transform group-hover:translate-x-1" />
@@ -148,7 +167,9 @@ const RoomList = ({ rooms, isAuthenticated = true }: RoomListProps) => {
             <span className="group-hover:text-primary text-base font-bold text-white transition">
               Xem tất cả
             </span>
-            <span className="text-xs text-white/50">{filteredRooms.length} phòng</span>
+            <span className="text-xs text-white/50">
+              {filteredRooms.length} phòng
+            </span>
           </Link>
         </motion.div>
       </div>

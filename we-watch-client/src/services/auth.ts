@@ -5,6 +5,7 @@ import {
   LoginCredentials, 
   RegisterCredentials, 
   RegisterResponse,
+  UserResponse,
 } from '../types/auth';
 
 /**
@@ -36,6 +37,38 @@ export const register = async (credentials: RegisterCredentials): Promise<Regist
     console.log(`Data:`, credentials);
     console.log('🚀 ~ handleSubmit ~ res:', error);
     throw new Error(errorMessage);
+  }
+};
+
+/**
+ * Cập nhật thông tin cá nhân
+ */
+export const updateProfile = async (data: Partial<RegisterCredentials>): Promise<{ user: UserResponse; accessToken: string }> => {
+  try {
+    const { data: responseData } = await api.patch<{ user: UserResponse; accessToken: string }>('/auth/profile', data);
+    return responseData;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Update profile failed');
+  }
+};
+
+/**
+ * Upload ảnh lên server (Cloudinary)
+ * Trả về: { url, publicId }
+ */
+export const uploadImage = async (file: File): Promise<{ url: string; publicId: string }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  try {
+    const { data } = await api.post<{ url: string; publicId: string }>('/upload/image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Upload failed');
   }
 };
 

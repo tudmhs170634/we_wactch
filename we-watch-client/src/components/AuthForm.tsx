@@ -91,20 +91,18 @@ const AuthForm: React.FC<AuthFormProps> = ({
         const res = await login({ email, password });
         console.log('Login response:', res);
         await minLoadingTime;
-        setAuth(res.user, res.token);
+        setAuth(res.user, res.accessToken);
         toast.success(`Chào mừng trở lại, ${res?.user?.username}!`);
 
         const destination =
           res.user.role === 'admin' ? '/admin' : callbackUrl || '/';
-        // Dùng hard navigation để đảm bảo cookie được gửi đúng lên proxy middleware
         window.location.href = destination;
       } else {
         const res = await register({ email, username, password, avatarUrl });
-        console.log('Auto-login response:', res);
+        console.log('Register response:', res);
         await minLoadingTime;
-        setAuth(res.user, res.token);
+        setAuth(res.user, res.accessToken);
         toast.success(`Đăng ký thành công! Chào mừng ${res.user.username}`);
-        // Hard navigation để cookie được commit trước khi proxy đọc
         window.location.href = callbackUrl || '/';
       }
     } catch (error: any) {
@@ -129,7 +127,7 @@ const AuthForm: React.FC<AuthFormProps> = ({
         >
           <div
             className="absolute inset-0 bg-cover bg-center opacity-50"
-            style={{ backgroundImage: "url('/background.jpg')" }}
+            style={{ backgroundImage: "url('https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045436/wewatch/assets/background.webp')" }}
           />
         </motion.div>
 
@@ -156,7 +154,7 @@ const AuthForm: React.FC<AuthFormProps> = ({
           <div className="glass relative overflow-hidden rounded-[32px] border border-white/10 bg-black/60 shadow-2xl backdrop-blur-3xl">
             <div className="flex min-h-[500px] flex-col gap-10 p-10 md:flex-row">
               <AnimatePresence>
-                {!isLogin === true && (
+                {!isLogin && (
                   <motion.div
                     initial={{ opacity: 0, width: 0, x: -20 }}
                     animate={{ opacity: 1, width: '300px', x: 0 }}
