@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ExternalLink, PlayCircle, Heart, ArrowRight } from 'lucide-react';
+import { ExternalLink, Plus, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -17,9 +17,10 @@ interface Film {
 
 interface FilmLibraryProps {
   films: Film[];
+  onCreateRoom?: (film: Film) => void;
 }
 
-const FilmLibrary = ({ films }: FilmLibraryProps) => {
+const FilmLibrary = ({ films, onCreateRoom }: FilmLibraryProps) => {
   return (
     <motion.section
       initial={{ opacity: 0, y: 50 }}
@@ -49,12 +50,6 @@ const FilmLibrary = ({ films }: FilmLibraryProps) => {
             whileHover={{ scale: 1.02 }}
             className={`relative ${film.h} glass group mb-6 w-full cursor-pointer break-inside-avoid overflow-hidden rounded-[30px] border border-white/10`}
           >
-            <Link
-              href={`/videos/${film.slug}`}
-              className="absolute inset-0 z-10"
-              aria-label={`Xem chi tiết: ${film.title}`}
-            />
-
             <Image
               src={film.img}
               alt={film.title}
@@ -72,18 +67,25 @@ const FilmLibrary = ({ films }: FilmLibraryProps) => {
                 {film.title}
               </h3>
 
-              <div className="mt-4 flex translate-y-4 items-center gap-4 opacity-0 transition-opacity duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                <button className="relative z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-lg">
-                  <PlayCircle className="h-5 w-5" />
+              <div className="mt-4 flex translate-y-4 items-center gap-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+                {/* Plus — Tạo phòng */}
+                <button
+                  onClick={() => onCreateRoom?.(film)}
+                  className="relative z-20 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-lg transition-transform hover:scale-110"
+                  title="Tạo phòng xem phim này"
+                >
+                  <Plus className="h-5 w-5" />
                 </button>
-                <button className="relative z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-md">
-                  <Heart className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
 
-            <div className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white opacity-0 backdrop-blur-md transition-all group-hover:opacity-100">
-              <ArrowRight className="h-5 w-5 rotate-[-45deg]" />
+                {/* ArrowRight — Chi tiết phim */}
+                <Link
+                  href={`/videos/${film.slug}`}
+                  className="relative z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-md transition-transform hover:scale-110 hover:bg-white/20"
+                  title="Xem chi tiết phim"
+                >
+                  <ArrowRight className="h-5 w-5" />
+                </Link>
+              </div>
             </div>
           </motion.div>
         ))}

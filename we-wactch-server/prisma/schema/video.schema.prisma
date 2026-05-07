@@ -3,12 +3,13 @@ model Video {
   title        String
   description  String?
   videoUrl     String
-  videoKey     String
   thumbnailUrl String?
   duration     Float
   size         BigInt
   ownerId      String   @db.Uuid
-  owner        User     @relation("UserVideos", fields: [ownerId], references: [id], onDelete: Cascade)
-  rooms        Room[]   @relation("VideoInRooms")
   createdAt    DateTime @default(now())
+  videoKey     String
+  isActive     Boolean  @default(false)
+  rooms        Room[]   @relation("VideoInRooms")
+  owner        User     @relation("UserVideos", fields: [ownerId], references: [id], onDelete: Cascade)
 }

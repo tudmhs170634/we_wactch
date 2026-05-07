@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Header from '../components/Header';
 import Hero from '../components/home/Hero';
 import RoomList from '../components/home/RoomList';
 import FilmLibrary from '../components/home/FilmLibrary';
 import Background from '../components/layout/Background';
 import Testimonials from '../components/home/Testimonials';
+import CreateRoomModal from '../components/rooms/CreateRoomModal';
 import { useAuthStore } from '../store/useAuthStore';
 import {
   MOCK_ROOMS,
@@ -16,6 +17,8 @@ import {
 
 export default function HomePage() {
   const { isAuthenticated } = useAuthStore();
+  const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const [preselectedFilm, setPreselectedFilm] = useState<{ title: string } | null>(null);
 
   return (
     <main className="relative min-h-screen font-sans text-slate-100">
@@ -47,7 +50,13 @@ export default function HomePage() {
         )}
 
         <RoomList rooms={MOCK_ROOMS} isAuthenticated={isAuthenticated} />
-        <FilmLibrary films={MOCK_FILMS} />
+        <FilmLibrary
+          films={MOCK_FILMS}
+          onCreateRoom={(film) => {
+            setPreselectedFilm(film);
+            setRoomModalOpen(true);
+          }}
+        />
 
         {!isAuthenticated && (
           <div className="mb-20">
@@ -55,6 +64,12 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      <CreateRoomModal
+        isOpen={roomModalOpen}
+        onClose={() => { setRoomModalOpen(false); setPreselectedFilm(null); }}
+        defaultVideoTitle={preselectedFilm?.title}
+      />
     </main>
   );
 }

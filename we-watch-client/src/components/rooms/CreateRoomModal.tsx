@@ -1,14 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Lock, Globe, Upload, Image as ImageIcon, Eye, EyeOff } from 'lucide-react';
+import { X, Lock, Globe, Upload, Image as ImageIcon, Eye, EyeOff, Loader2, Search, Film, Check } from 'lucide-react';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import Image from 'next/image';
+import { toast } from 'sonner';
+import { createRoom } from '@/src/services/room';
+import { getVideos } from '@/src/services/video';
 
 interface CreateRoomModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onCreated?: (room: any) => void;
+  defaultVideoId?: string;
+  defaultVideoTitle?: string;
+  defaultVideoThumb?: string | null;
 }
 
 const PRESET_BANNERS = [
@@ -20,11 +28,20 @@ const PRESET_BANNERS = [
   'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80',
 ];
 
-export default function CreateRoomModal({ isOpen, onClose }: CreateRoomModalProps) {
+export default function CreateRoomModal({ isOpen, onClose, onCreated, defaultVideoId, defaultVideoTitle, defaultVideoThumb }: CreateRoomModalProps) {
   const { user } = useAuthStore();
+  const router = useRouter();
   const hostId = user?.username || 'user_123';
 
   const [tab, setTab] = useState<'private' | 'public'>('private');
+  const [loading, setLoading] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<{ id: string; title: string; thumbnailUrl?: string | null } | null>(
+    defaultVideoId ? { id: defaultVideoId, title: defaultVideoTitle ?? '', thumbnailUrl: defaultVideoThumb } : null
+  );
+  const [videoSearch, setVideoSearch] = useState('');
+  const [videoList, setVideoList] = useState<any[]>([]);
+  const [videoPickerOpen, setVideoPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
   
   const [roomName, setRoomName] = useState('');
   const [slug, setSlug] = useState('');
@@ -44,19 +61,55 @@ export default function CreateRoomModal({ isOpen, onClose }: CreateRoomModalProp
     }
   }, [roomName, customSlug]);
 
+  // Sync default video when props change (e.g. opened from video card)
   useEffect(() => {
-    if (tab === 'private') {
-      setMaxUsers(5);
-    } else {
-      setMaxUsers(10);
+    if (defaultVideoId) {
+      setSelectedVideo({ id: defaultVideoId, title: defaultVideoTitle ?? '', thumbnailUrl: defaultVideoThumb });
     }
-  }, [tab]);
+  }, [defaultVideoId, defaultVideoTitle, defaultVideoThumb]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Fetch video list for picker
+  useEffect(() => {
+    if (!videoPickerOpen) return;
+    getVideos(1, 50).then((res) => setVideoList(res.videos ?? [])).catch(() => {});
+  }, [videoPickerOpen]);
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setVideoPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: POST /api/rooms
-    console.log('Creating room:', { tab, roomName, slug, password, selectedBanner, hostId, maxUsers });
-    onClose();
+    if (!roomName.trim()) return toast.error('Vui lòng nhập tên phòng.');
+    if (tab === 'private' && !password.trim()) return toast.error('Phòng private cần mật khẩu.');
+
+    setLoading(true);
+    try {
+      const room = await createRoom({
+        title: roomName.trim(),
+        type: tab,
+        password: tab === 'private' ? password : undefined,
+        maxUsers,
+        videoId: selectedVideo?.id,
+      });
+      console.log('Room created:', room);
+      toast.success('Tạo phòng thành công!');
+      onCreated?.(room);
+      // Dùng window.location để đảm bảo redirect ngay lập tức
+      window.location.href = `/private/${room.id}`;
+    } catch (err: any) {
+      console.error('Create room error:', err);
+      toast.error(err.response?.data?.message || 'Tạo phòng thất bại. Vui lòng đăng nhập lại.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -168,6 +221,82 @@ export default function CreateRoomModal({ isOpen, onClose }: CreateRoomModalProp
               </div>
             )}
 
+            {/* Video Picker */}
+            <div className="flex flex-col gap-2" ref={pickerRef}>
+              <label className="text-sm font-bold text-white/80">Phim chiếu <span className="text-white/30 font-normal">(tùy chọn)</span></label>
+              {selectedVideo ? (
+                <div className="flex items-center gap-3 rounded-[16px] border border-[#C800DF]/30 bg-[#C800DF]/5 px-4 py-2.5">
+                  {selectedVideo.thumbnailUrl ? (
+                    <div className="relative h-9 w-14 flex-shrink-0 overflow-hidden rounded-lg">
+                      <Image src={selectedVideo.thumbnailUrl} alt={selectedVideo.title} fill className="object-cover" />
+                    </div>
+                  ) : (
+                    <Film className="h-5 w-5 text-[#C800DF]" />
+                  )}
+                  <span className="flex-1 line-clamp-1 text-sm font-bold text-white">{selectedVideo.title}</span>
+                  <button type="button" onClick={() => setSelectedVideo(null)} className="text-white/40 hover:text-white">
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setVideoPickerOpen((v) => !v)}
+                  className="flex items-center gap-2 rounded-[16px] border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/50 hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <Film size={16} />
+                  Chọn phim...
+                </button>
+              )}
+
+              <AnimatePresence>
+                {videoPickerOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="z-50 max-h-56 overflow-hidden rounded-[16px] border border-white/10 bg-[#12121A] shadow-2xl"
+                  >
+                    <div className="sticky top-0 flex items-center gap-2 border-b border-white/10 bg-[#12121A] px-3 py-2">
+                      <Search size={14} className="text-white/40" />
+                      <input
+                        autoFocus
+                        value={videoSearch}
+                        onChange={(e) => setVideoSearch(e.target.value)}
+                        placeholder="Tìm phim..."
+                        className="flex-1 bg-transparent text-sm text-white outline-none placeholder-white/30"
+                      />
+                    </div>
+                    <div className="scrollbar-hide max-h-40 overflow-y-auto">
+                      {videoList
+                        .filter((v) => v.title.toLowerCase().includes(videoSearch.toLowerCase()))
+                        .map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() => { setSelectedVideo(v); setVideoPickerOpen(false); setVideoSearch(''); }}
+                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
+                          >
+                            {v.thumbnailUrl ? (
+                              <div className="relative h-8 w-12 flex-shrink-0 overflow-hidden rounded-md">
+                                <Image src={v.thumbnailUrl} alt={v.title} fill className="object-cover" />
+                              </div>
+                            ) : (
+                              <Film size={16} className="text-white/30" />
+                            )}
+                            <span className="flex-1 line-clamp-1 text-sm font-medium text-white">{v.title}</span>
+                            {selectedVideo?.id === v.id && <Check size={14} className="text-[#C800DF]" />}
+                          </button>
+                        ))}
+                      {videoList.filter((v) => v.title.toLowerCase().includes(videoSearch.toLowerCase())).length === 0 && (
+                        <p className="px-4 py-3 text-xs text-white/30">Không tìm thấy phim.</p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <div className="flex flex-col gap-2">
               <label className="text-sm font-bold text-white/80">Banner</label>
               <div className="flex gap-2">
@@ -245,8 +374,10 @@ export default function CreateRoomModal({ isOpen, onClose }: CreateRoomModalProp
 
             <button
               type="submit"
-              className="mt-4 w-full rounded-full bg-gradient-to-r from-[#C800DF] to-[#E60076] py-4 text-sm font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98]"
+              disabled={loading}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#C800DF] to-[#E60076] py-4 text-sm font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
             >
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {tab === 'private' ? 'Tạo Phòng We Watch' : 'Tạo Phòng Community'}
             </button>
           </form>
