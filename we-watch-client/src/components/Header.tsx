@@ -18,6 +18,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
+import CreateRoomModal from './rooms/CreateRoomModal';
 
 const Header = () => {
   const router = useRouter();
@@ -29,9 +30,10 @@ const Header = () => {
 
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [isCreateRoomModalOpen, setIsCreateRoomModalOpen] =
+    React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
-  // Mock user data for UI testing
   const mockUser = {
     username: 'trungne',
     email: 'nguyenthetrunq@gmail.com',
@@ -42,7 +44,6 @@ const Header = () => {
 
   const user = realUser || mockUser;
 
-  // Close menu when clicking outside
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -87,12 +88,6 @@ const Header = () => {
           <Link href="/rooms" className="hover:text-primary transition-colors">
             Phòng
           </Link>
-          <Link
-            href="/community"
-            className="hover:text-primary transition-colors"
-          >
-            Cộng đồng
-          </Link>
         </div>
 
         <div className="flex items-center gap-2 md:gap-4">
@@ -103,13 +98,13 @@ const Header = () => {
                 <span className="bg-primary absolute top-2 right-2 h-2 w-2 rounded-full border-2 border-[#0A0A0B]" />
               </button>
 
-              <Link
-                href="/rooms"
+              <button
+                onClick={() => setIsCreateRoomModalOpen(true)}
                 className="bg-primary shadow-primary/20 flex items-center gap-2 rounded-full px-6 py-2 text-sm font-bold text-white shadow-lg transition-all hover:scale-105"
               >
                 <PlusSquare size={16} />
                 Tạo phòng
-              </Link>
+              </button>
 
               <div className="relative" ref={menuRef}>
                 <button
@@ -122,7 +117,10 @@ const Header = () => {
                 >
                   <div className="relative h-8 w-8 overflow-hidden rounded-full border border-white/10">
                     <Image
-                      src={user?.avatarUrl || '/avatars/avatar1.png'}
+                      src={
+                        user?.avatarUrl ||
+                        'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045397/wewatch/avatars/avatar_1.webp'
+                      }
                       alt="Avatar"
                       fill
                       className="object-cover"
@@ -246,20 +244,16 @@ const Header = () => {
               </div>
 
               <div className="mt-12 flex flex-col gap-8 text-center">
-                {['Trang chủ', 'Videos', 'Phòng', 'Cộng đồng'].map(
-                  (item, idx) => (
-                    <Link
-                      key={idx}
-                      href={
-                        item === 'Trang chủ' ? '/' : `/${item.toLowerCase()}`
-                      }
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="text-3xl font-black tracking-tighter text-white/40 transition-all hover:text-white"
-                    >
-                      {item}
-                    </Link>
-                  )
-                )}
+                {['Trang chủ', 'Videos', 'Phòng'].map((item, idx) => (
+                  <Link
+                    key={idx}
+                    href={item === 'Trang chủ' ? '/' : `/${item.toLowerCase()}`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="text-3xl font-black tracking-tighter text-white/40 transition-all hover:text-white"
+                  >
+                    {item}
+                  </Link>
+                ))}
 
                 {!isAuthenticated && (
                   <Link
@@ -281,6 +275,11 @@ const Header = () => {
           )}
         </AnimatePresence>
       </motion.nav>
+
+      <CreateRoomModal
+        isOpen={isCreateRoomModalOpen}
+        onClose={() => setIsCreateRoomModalOpen(false)}
+      />
     </div>
   );
 };
