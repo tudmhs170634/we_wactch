@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { ArrowUp } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 const ScrollToTop = () => {
   const [isVisible, setIsVisible] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const onScroll = () => {
@@ -16,6 +18,11 @@ const ScrollToTop = () => {
 
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  // Hide in room pages
+  if (pathname?.includes('/private/') || pathname?.includes('/community/')) {
+    return null;
+  }
 
   if (!isVisible) return null;
 
@@ -32,4 +39,3 @@ const ScrollToTop = () => {
 };
 
 export default ScrollToTop;
-

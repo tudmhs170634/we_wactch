@@ -30,7 +30,7 @@ const AdminDashboard = () => {
       color: '#C800DF',
     },
     {
-      label: 'Phòng đang mở',
+      label: 'Phòng mở',
       value: '142',
       change: '+5%',
       icon: PlayCircle,

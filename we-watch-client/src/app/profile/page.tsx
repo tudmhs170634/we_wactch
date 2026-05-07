@@ -89,7 +89,7 @@ const ProfilePage = () => {
         avatarUrl: updatedUser.avatarUrl || '',
         avatarPublicId: '',
       });
-
+      
       setIsEditing(false);
       toast.success('Cập nhật hồ sơ thành công!');
     } catch (error: any) {
