@@ -1,33 +1,48 @@
-import { Injectable, Logger } from '@nestjs/common';
-
-interface CacheEntry {
-    value: unknown;
-    expiresAt: number;
-}
+import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
+import Redis from 'ioredis';
 
 @Injectable()
-export class RedisService {
-    private readonly logger = new Logger('CacheService');
-    private store = new Map<string, CacheEntry>();
+export class RedisService implements OnModuleDestroy {
+    private readonly logger = new Logger(RedisService.name);
+    private client: Redis;
+
+    constructor() {
+        this.client = new Redis(process.env.REDIS_URL!, {
+            tls: {},
+            lazyConnect: true,
+            retryStrategy: (times) => (times > 3 ? null : 500),
+        });
+
+        this.client.on('connect', () => this.logger.log('✅ Redis (Upstash) connected'));
+        this.client.on('error', (err) => this.logger.warn(`Redis error: ${err.message}`));
+    }
 
     async get<T>(key: string): Promise<T | null> {
-        const entry = this.store.get(key);
-        if (!entry) return null;
-        if (Date.now() > entry.expiresAt) {
-            this.store.delete(key);
+        try {
+            const data = await this.client.get(key);
+            return data ? JSON.parse(data) : null;
+        } catch {
             return null;
         }
-        return entry.value as T;
     }
 
     async set(key: string, value: unknown, ttlSeconds = 60): Promise<void> {
-        this.store.set(key, {
-            value,
-            expiresAt: Date.now() + ttlSeconds * 1000,
-        });
+        try {
+            await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
+        } catch (err: any) {
+            this.logger.warn(`Redis set failed: ${err.message}`);
+        }
     }
 
     async del(...keys: string[]): Promise<void> {
-        keys.forEach((k) => this.store.delete(k));
+        try {
+            if (keys.length) await this.client.del(...keys);
+        } catch (err: any) {
+            this.logger.warn(`Redis del failed: ${err.message}`);
+        }
+    }
+
+    onModuleDestroy() {
+        this.client.disconnect();
     }
 }
