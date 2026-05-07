@@ -7,6 +7,7 @@ import { Search, Plus, Film } from 'lucide-react';
 import Header from '@/src/components/Header';
 import Background from '@/src/components/layout/Background';
 import UploadVideoModal from './UploadVideoModal';
+import CreateRoomModal from '@/src/components/rooms/CreateRoomModal';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import { getVideos } from '@/src/services/video';
 
@@ -43,6 +44,8 @@ type VideosPageClientProps = {
 export default function VideosPageClient({ initialSearch = '' }: VideosPageClientProps) {
   const [query, setQuery] = useState(initialSearch);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -156,44 +159,51 @@ export default function VideosPageClient({ initialSearch = '' }: VideosPageClien
         {!loading && filtered.length > 0 && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((video) => (
-              <Link
-                key={video.id}
-                href={`/videos/${video.id}`}
-                className="glass group relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 transition-all hover:border-white/20"
-              >
-                <div className="relative aspect-[16/10] w-full bg-white/5">
-                  {video.thumbnailUrl ? (
-                    <Image
-                      src={video.thumbnailUrl}
-                      alt={video.title}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover opacity-75 transition-all duration-700 group-hover:scale-105 group-hover:opacity-100"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center">
-                      <Film className="h-10 w-10 text-white/20" />
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0B] via-transparent to-transparent opacity-90" />
-                </div>
+              <div key={video.id} className="glass group relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 transition-all hover:border-white/20">
+                {/* + button overlay */}
+                <button
+                  onClick={(e) => { e.preventDefault(); setSelectedVideo(video); setRoomModalOpen(true); }}
+                  className="absolute top-3 right-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-lg opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
+                  title="Tạo phòng với video này"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
 
-                <div className="p-6">
-                  <div className="text-secondary text-[10px] font-black tracking-[0.2em] uppercase">
-                    {video.owner?.username ?? 'Unknown'}
+                <Link href={`/videos/${video.id}`} className="block">
+                  <div className="relative aspect-[16/10] w-full bg-white/5">
+                    {video.thumbnailUrl ? (
+                      <Image
+                        src={video.thumbnailUrl}
+                        alt={video.title}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover opacity-75 transition-all duration-700 group-hover:scale-105 group-hover:opacity-100"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Film className="h-10 w-10 text-white/20" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0B] via-transparent to-transparent opacity-90" />
                   </div>
-                  <div className="mt-2 line-clamp-1 text-xl font-black text-white">
-                    {video.title}
+
+                  <div className="p-6">
+                    <div className="text-secondary text-[10px] font-black tracking-[0.2em] uppercase">
+                      {video.owner?.username ?? 'Unknown'}
+                    </div>
+                    <div className="mt-2 line-clamp-1 text-xl font-black text-white">
+                      {video.title}
+                    </div>
+                    <div className="mt-3 line-clamp-2 text-sm font-medium text-white/60">
+                      {video.description ?? '—'}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between text-xs font-bold tracking-widest text-white/60 uppercase">
+                      <span>{formatDuration(video.duration)}</span>
+                      <span>{formatSize(video.size)}</span>
+                    </div>
                   </div>
-                  <div className="mt-3 line-clamp-2 text-sm font-medium text-white/60">
-                    {video.description ?? '—'}
-                  </div>
-                  <div className="mt-4 flex items-center justify-between text-xs font-bold tracking-widest text-white/60 uppercase">
-                    <span>{formatDuration(video.duration)}</span>
-                    <span>{formatSize(video.size)}</span>
-                  </div>
-                </div>
-              </Link>
+                </Link>
+              </div>
             ))}
           </div>
         )}
@@ -203,8 +213,15 @@ export default function VideosPageClient({ initialSearch = '' }: VideosPageClien
         open={uploadOpen}
         onClose={() => {
           setUploadOpen(false);
-          fetchVideos(); // Refresh list sau khi upload
+          fetchVideos();
         }}
+      />
+      <CreateRoomModal
+        isOpen={roomModalOpen}
+        onClose={() => { setRoomModalOpen(false); setSelectedVideo(null); }}
+        defaultVideoId={selectedVideo?.id}
+        defaultVideoTitle={selectedVideo?.title}
+        defaultVideoThumb={selectedVideo?.thumbnailUrl}
       />
     </main>
   );

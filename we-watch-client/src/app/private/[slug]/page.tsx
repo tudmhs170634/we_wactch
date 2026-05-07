@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, use } from 'react';
 import { MOCK_VIDEOS, MOCK_FILMS } from '@/src/constants/mockData';
 import Image from 'next/image';
 import {
@@ -29,9 +29,16 @@ import {
   LogOut,
   Users,
   VideoOff,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { getRoom, getRoomBySlug } from '@/src/services/room';
+import { toast } from 'sonner';
+import { useSocket } from '@/src/hooks/useSocket';
+import { useAuthStore } from '@/src/store/useAuthStore';
+import VideoPlayer from '@/src/components/videos/VideoPlayer';
+import api from '@/src/lib/axios';
 
 const MOCK_MEMBERS = [
   {
@@ -133,16 +140,74 @@ const MOCK_CHAT = [
 ];
 
 export default function WeWatchRoomPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
+  const params = use(paramsPromise);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncDone, setSyncDone] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState(MOCK_CHAT);
+
+  const { user } = useAuthStore();
+  const [room, setRoom] = useState<any>(null);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isHost, setIsHost] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Real-time members from socket
+  const { members: socketMembers } = useSocket(room?.id, user);
+
+  useEffect(() => {
+    const fetchRoom = async () => {
+      if (!params.slug) return;
+      try {
+        setLoading(true);
+        let data;
+        try {
+          data = await getRoom(params.slug);
+        } catch {
+          data = await getRoomBySlug(params.slug);
+        }
+        setRoom(data);
+
+        // Fetch stream URL if video exists
+        if (data.videoId) {
+          try {
+            const res = await api.get(`/videos/${data.videoId}/stream-url`);
+            setStreamUrl(res.data.url);
+          } catch (e) {
+            console.error('Fetch stream URL error:', e);
+          }
+        }
+      } catch (err: any) {
+        toast.error('Không thể tải thông tin phòng.');
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRoom();
+  }, [params.slug]);
+
+  // Determine host state
+  useEffect(() => {
+    if (room && user) {
+      const isRoomHost = room.hostId === user.username || room.host?.username === user.username;
+      setIsHost(isRoomHost);
+    }
+  }, [room, user]);
+
+  useEffect(() => {
+    if (room) {
+      console.log('Room loaded in UI:', room);
+      console.log('Video URL:', room.video?.videoUrl);
+    }
+  }, [room]);
 
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
   const [isFilmsOpen, setIsFilmsOpen] = useState(true);
@@ -151,11 +216,10 @@ export default function WeWatchRoomPage({
   const [isMyMicOn, setIsMyMicOn] = useState(true);
   const [isMyCamOn, setIsMyCamOn] = useState(true);
 
-  const [currentFilmId, setCurrentFilmId] = useState(1);
+  const [currentFilmId, setCurrentFilmId] = useState<any>(null);
   const [requestedVideos, setRequestedVideos] = useState(
     MOCK_VIDEOS.slice(0, 3)
   );
-  const [isHost, setIsHost] = useState(true); // Mocking host view
   const [memberOffset, setMemberOffset] = useState(0);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -165,6 +229,15 @@ export default function WeWatchRoomPage({
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.play().catch(() => {});
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isPlaying]);
 
   const handleSync = () => {
     setIsSyncing(true);
@@ -235,24 +308,29 @@ export default function WeWatchRoomPage({
           </span>
           <div className="h-4 w-px bg-white/20"></div>
           <h1 className="text-sm font-bold text-white">
-            Phòng của Trung - K-Drama World
+            {loading ? 'Đang tải phòng...' : room ? room.title : 'Không tìm thấy phòng'}
           </h1>
-          <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
-            Private
-          </span>
+          {room && (
+            <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
+              {room.type}
+            </span>
+          )}
         </Link>
         <div className="flex items-center gap-3">
+          {room?.type === 'private' && room?.password && (
+            <div className="flex items-center gap-2 rounded-lg border border-dashed border-[#C800DF]/50 bg-[#C800DF]/10 px-3 py-1.5">
+              <span className="font-mono text-xs font-black text-[#C800DF]">
+                PWD: {room.password}
+              </span>
+            </div>
+          )}
           <button
             onClick={() => setIsHost(!isHost)}
             className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold transition-all ${isHost ? 'bg-[#C800DF]/20 text-[#C800DF]' : 'bg-white/5 text-white/60'}`}
           >
             {isHost ? 'View as Host' : 'View as Viewer'}
           </button>
-          <div className="flex items-center gap-2 rounded-lg border border-dashed border-[#C800DF]/50 bg-[#C800DF]/10 px-3 py-1.5">
-            <span className="font-mono text-xs font-black text-[#C800DF]">
-              PIN: 4829
-            </span>
-          </div>
+
           <button
             onClick={handleCopyLink}
             className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/10"
@@ -274,6 +352,44 @@ export default function WeWatchRoomPage({
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
         {/* LEFT SIDEBAR */}
         <div className="flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden">
+          {/* Thông tin Chủ phòng */}
+          {room?.host && (
+            <div className="glass rounded-[24px] border border-white/5 bg-white/5 p-4">
+              <div className="mb-3 text-[10px] font-black tracking-widest text-white/40 uppercase">
+                Chủ phòng
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="relative h-12 w-12 overflow-hidden rounded-full border border-[#C800DF]/50 p-0.5">
+                  <div className="relative h-full w-full overflow-hidden rounded-full">
+                    {room.host.avatarUrl ? (
+                      <Image
+                        src={room.host.avatarUrl}
+                        alt={room.host.username}
+                        fill
+                        unoptimized
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-white/10">
+                        <Users size={20} className="text-white/20" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-black text-white">{room.host.username}</span>
+                  <span className="text-[10px] font-bold text-green-400">Online</span>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col gap-1 border-t border-white/5 pt-3">
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-white/40">Tham gia:</span>
+                  <span className="text-white/80">{new Date(room.createdAt).toLocaleDateString('vi-VN')}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* List Phim */}
           <div
             className={`glass flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5 transition-all duration-300 ${isFilmsOpen ? 'flex-1' : 'h-fit flex-none'}`}
@@ -338,7 +454,7 @@ export default function WeWatchRoomPage({
               onClick={() => setIsQueueOpen(!isQueueOpen)}
             >
               <h3 className="text-sm font-bold tracking-wider text-white uppercase">
-                Yêu cầu xem phim
+                Phim đang xem
               </h3>
               {isQueueOpen ? (
                 <ChevronUp size={16} />
@@ -352,8 +468,33 @@ export default function WeWatchRoomPage({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="scrollbar-hide flex flex-1 flex-col gap-3 overflow-y-auto p-4"
+                  className="scrollbar-hide flex flex-1 flex-col gap-4 overflow-y-auto p-4"
                 >
+                  {/* Current Video from DB */}
+                  {room?.video && (
+                    <div className="flex flex-col gap-2 rounded-2xl border border-[#C800DF]/30 bg-[#C800DF]/5 p-2">
+                       <div className="relative aspect-video w-full overflow-hidden rounded-xl">
+                          <Image
+                            src={room.video.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
+                            alt={room.video.title}
+                            fill
+                            unoptimized
+                            className="object-cover"
+                          />
+                          <div className="absolute top-2 left-2 rounded-md bg-[#C800DF] px-2 py-0.5 text-[10px] font-black text-white uppercase shadow-lg">
+                            Đang chiếu
+                          </div>
+                       </div>
+                       <div className="px-1 py-1">
+                          <h4 className="text-sm font-black text-white line-clamp-1">{room.video.title}</h4>
+                          <p className="text-[10px] font-bold text-white/40 mt-0.5">Thời lượng: {room.video.duration ? Math.floor(room.video.duration / 60) + ' phút' : '--'}</p>
+                       </div>
+                    </div>
+                  )}
+
+                  <div className="h-px w-full bg-white/5 my-1"></div>
+                  <div className="text-[10px] font-black text-white/20 uppercase tracking-widest pl-1">Danh sách chờ</div>
+
                   {requestedVideos.map((vid) => (
                     <div
                       key={vid.id}
@@ -450,69 +591,22 @@ export default function WeWatchRoomPage({
 
         {/* CENTER: Video + Member Cams */}
         <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-          {/* Video Player */}
-          <div className="group relative flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl">
-            <Image
-              src={MOCK_VIDEOS[0].backdrop}
-              alt="Video"
-              fill
-              className="object-cover opacity-80"
-            />
+          <div className="group relative aspect-video w-full overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl">
+            {streamUrl ? (
+              <VideoPlayer src={streamUrl} poster={room?.video?.thumbnailUrl} />
+            ) : room?.video ? (
+               <div className="flex h-full w-full items-center justify-center bg-white/5 animate-pulse">
+                 <Loader2 className="h-10 w-10 animate-spin text-white/20" />
+               </div>
+            ) : (
+              <Image
+                src={MOCK_VIDEOS[0].backdrop}
+                alt="Video"
+                fill
+                className="object-cover opacity-80"
+              />
+            )}
 
-            {/* Sync Button */}
-            <div className="absolute right-4 bottom-20 z-20 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-              <button
-                onClick={handleSync}
-                disabled={isSyncing || syncDone}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-md transition-all ${
-                  syncDone
-                    ? 'bg-green-500/80'
-                    : 'border border-white/10 bg-black/60 hover:bg-[#C800DF]/80'
-                }`}
-              >
-                {isSyncing ? (
-                  <RefreshCw size={16} className="animate-spin" />
-                ) : syncDone ? (
-                  <Check size={16} />
-                ) : (
-                  <RefreshCw size={16} />
-                )}
-                {isSyncing
-                  ? 'Đang đồng bộ...'
-                  : syncDone
-                    ? 'Đã đồng bộ ✓'
-                    : 'Đồng bộ với Host'}
-              </button>
-            </div>
-
-            {/* Controls */}
-            <div className="absolute inset-0 z-10 flex flex-col justify-end bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-              <div className="flex flex-col gap-2 p-4">
-                <div className="group/seek relative h-1.5 w-full cursor-pointer rounded-full bg-white/20">
-                  <div className="absolute h-full w-1/3 rounded-full bg-[#C800DF] transition-all"></div>
-                  <div className="absolute top-1/2 left-1/3 h-3 w-3 -translate-x-1/2 -translate-y-1/2 scale-0 rounded-full bg-white shadow-lg transition-transform group-hover/seek:scale-100"></div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      className="text-white transition-colors hover:text-[#C800DF]"
-                    >
-                      {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-                    </button>
-                    <button className="text-white transition-colors hover:text-[#C800DF]">
-                      <Volume2 size={20} />
-                    </button>
-                    <span className="text-xs font-medium text-white/80">
-                      24:12 / 1:46:00
-                    </span>
-                  </div>
-                  <button className="text-white transition-colors hover:text-[#C800DF]">
-                    <Maximize size={20} />
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Member Cameras Section */}
@@ -566,33 +660,31 @@ export default function WeWatchRoomPage({
               </button>
             </div>
 
-            {/* OTHER MEMBERS (Paginated - always 3) */}
+            {/* OTHER MEMBERS (Real-time from Socket) */}
             <div className="flex h-full flex-1 gap-3 overflow-hidden">
-              {MOCK_MEMBERS.filter((m) => m.id !== 1)
+              {socketMembers
+                .filter((m) => m.username !== user?.username)
                 .slice(memberOffset, memberOffset + 3)
-                .map((m) => (
+                .map((m, idx) => (
                   <div
-                    key={m.id}
+                    key={m.username || idx}
                     className="relative basis-1/3 overflow-hidden rounded-[20px] border border-white/10 bg-[#1A1A1D]"
                   >
-                    <Image
-                      src={m.avatar}
-                      alt={m.name}
-                      fill
-                      unoptimized
-                      className="object-cover opacity-80"
-                    />
+                    {m.avatarUrl ? (
+                      <Image
+                        src={m.avatarUrl}
+                        alt={m.username}
+                        fill
+                        unoptimized
+                        className="object-cover opacity-80"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-white/5">
+                        <Users size={24} className="text-white/10" />
+                      </div>
+                    )}
                     <div className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
-                      {m.name}
-                    </div>
-                    <div
-                      className={`absolute right-2 bottom-2 flex h-5 w-5 items-center justify-center rounded-full ${m.micOn ? 'bg-green-500/80' : 'bg-red-500/80'}`}
-                    >
-                      {m.micOn ? (
-                        <Mic size={10} className="text-white" />
-                      ) : (
-                        <MicOff size={10} className="text-white" />
-                      )}
+                      {m.username || 'User'}
                     </div>
                   </div>
                 ))}
@@ -625,7 +717,7 @@ export default function WeWatchRoomPage({
               </span>
               <div className="flex items-center gap-1.5 text-xs text-green-400">
                 <div className="h-1.5 w-1.5 rounded-full bg-green-400"></div>
-                {MOCK_MEMBERS.length} online
+                {socketMembers.length} online
               </div>
             </div>
             <div className="rounded-lg border border-white/10 p-1 text-white/60">
@@ -646,34 +738,41 @@ export default function WeWatchRoomPage({
                 className="flex flex-col overflow-hidden border-b border-white/5"
               >
                 <div className="scrollbar-hide flex flex-1 flex-col gap-3 overflow-y-auto p-4">
-                  {MOCK_MEMBERS.map((m) => (
+                  {socketMembers.map((m, idx) => (
                     <div
-                      key={m.id}
+                      key={m.username || idx}
                       className="group flex items-center justify-between"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="relative h-8 w-8 overflow-hidden rounded-full">
-                          <Image
-                            src={m.avatar}
-                            alt={m.name}
-                            fill
-                            unoptimized
-                            className="object-cover"
-                          />
+                        <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-white/10">
+                          {m.avatarUrl ? (
+                            <Image
+                              src={m.avatarUrl}
+                              alt={m.username}
+                              fill
+                              unoptimized
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-white/10">
+                              <Users size={12} className="text-white/40" />
+                            </div>
+                          )}
                         </div>
                         <span className="text-sm font-bold text-white">
-                          {m.name}
+                          {m.username}
+                          {m.username === user?.username && ' (Bạn)'}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        {m.role === 'host' ? (
+                        {m.username === room?.host?.username ? (
                           <span className="rounded-full border border-[#C800DF] px-2 py-0.5 text-[10px] font-bold text-[#C800DF]">
                             Chủ phòng
                           </span>
                         ) : (
                           isHost && (
                             <button
-                              onClick={() => handleKick(m.name)}
+                              onClick={() => handleKick(m.username)}
                               className="text-red-500 opacity-0 transition-opacity group-hover:opacity-100 hover:scale-110"
                             >
                               <UserMinus size={14} />
