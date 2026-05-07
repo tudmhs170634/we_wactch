@@ -31,8 +31,11 @@ export const getRooms = async (page = 1, limit = 10, type?: string) => {
   return data;
 };
 
-// Hàm bổ sung để tương thích với code Admin cũ
-export const getAllRooms = (type?: string) => getRooms(1, 100, type);
+// Hàm bổ sung để tương thích với code Admin — trả về mảng rooms thay vì object phân trang
+export const getAllRooms = async (type?: string): Promise<Room[]> => {
+  const res = await getRooms(1, 100, type);
+  return res.rooms ?? [];
+};
 
 export const getRoom = async (id: string) => {
   const { data } = await api.get(`/rooms/${id}`);
