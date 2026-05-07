@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
-import { Room } from '@prisma/client';
+import { Room, RoomType } from '@prisma/client';
 
 type RoomWithRelations = Room & {
     host: { id: string; username: string; avatarUrl: string | null } | null;
@@ -28,7 +28,7 @@ const slugify = (title: string): string => {
     return `${base}-${suffix}`;
 };
 
-const ROOM_LIST_KEY = (page: number, limit: number) => `rooms:list:${page}:${limit}`;
+const ROOM_LIST_KEY = (page: number, limit: number, type?: string) => `rooms:list:${page}:${limit}:${type || 'all'}`;
 const ROOM_KEY = (id: string) => `rooms:item:${id}`;
 const ROOM_SLUG_KEY = (slug: string) => `rooms:slug:${slug}`;
 const TTL = 60;
@@ -51,7 +51,7 @@ export class RoomService {
             data: {
                 title: dto.title,
                 slug,
-                type: dto.type ?? 'public',
+                type: (dto.type as RoomType) ?? RoomType.public,
                 hostId: userId,
                 videoId: dto.videoId ?? null,
                 password: dto.password ?? null,
@@ -64,17 +64,24 @@ export class RoomService {
         });
 
         // Xóa cache list
-        await this.redis.del(ROOM_LIST_KEY(1, 10), ROOM_LIST_KEY(1, 20));
+        await this.redis.del(ROOM_LIST_KEY(1, 10), ROOM_LIST_KEY(1, 20), ROOM_LIST_KEY(1, 100));
         return room;
     }
 
-    async findAll(page = 1, limit = 10, onlyActive = true) {
-        const cacheKey = ROOM_LIST_KEY(page, limit);
+    async findAll(page = 1, limit = 10, type?: string, onlyActive = false) {
+        const cacheKey = ROOM_LIST_KEY(page, limit, type);
         const cached = await this.redis.get(cacheKey);
         if (cached) return cached;
 
         const skip = (page - 1) * limit;
-        const where = onlyActive ? { isActive: true } : {};
+        const where: any = {};
+        if (onlyActive) where.isActive = true;
+        if (type) {
+            if (type !== RoomType.private && type !== RoomType.public) {
+                throw new BadRequestException('Invalid room type');
+            }
+            where.type = type as RoomType;
+        }
 
         const [rooms, total] = await Promise.all([
             this.prisma.room.findMany({
@@ -141,7 +148,7 @@ export class RoomService {
             where: { id },
             data: {
                 title: dto.title,
-                type: dto.type,
+                type: dto.type as RoomType,
                 videoId: dto.videoId,
                 password: dto.password,
                 maxUsers: dto.maxUsers,

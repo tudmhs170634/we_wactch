@@ -5,9 +5,9 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { UploadModule } from '../upload/upload.module';
 
 @Module({
-    imports: [PrismaModule, UploadModule],
-    controllers: [VideoController],
-    providers: [VideoService],
-    exports: [VideoService],
+  imports: [PrismaModule, UploadModule],
+  controllers: [VideoController],
+  providers: [VideoService],
+  exports: [VideoService],
 })
 export class VideoModule {}

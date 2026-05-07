@@ -7,7 +7,11 @@ import { usePathname } from 'next/navigation';
 const Footer = () => {
   const pathname = usePathname();
 
-  if (pathname?.includes('/private/') || pathname?.includes('/community/')) {
+  if (
+    pathname?.includes('/private/') ||
+    pathname?.includes('/community/') ||
+    pathname?.includes('/admin')
+  ) {
     return null;
   }
 
@@ -23,7 +27,7 @@ const Footer = () => {
 
         {/* Tagline */}
         <p className="mb-10 max-w-xl text-center leading-relaxed font-medium text-slate-300">
-          "Có những bộ phim, xem một mình thì bình thường —{' '}
+          "Có những bộ video, xem một mình thì bình thường —{' '}
           <br className="hidden md:block" />
           xem cùng nhau lại thành kỷ niệm."
         </p>
