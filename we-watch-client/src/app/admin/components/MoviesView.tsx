@@ -117,13 +117,13 @@ const MoviesView: React.FC<MoviesViewProps> = ({
                     <>
                       <button
                         onClick={() => onApprove(movie.id)}
-                        className="flex-1 rounded-xl bg-red-600 py-2.5 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-red-100 transition-all hover:bg-red-700"
+                        className="w-25 rounded-xl bg-red-600 py-2.5 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-red-100 transition-all hover:bg-red-700"
                       >
                         Duyệt video
                       </button>
                       <button
                         onClick={() => onDelete(movie.id)}
-                        className="flex-1 rounded-xl bg-gray-50 py-2.5 text-[10px] font-black tracking-widest text-gray-400 uppercase transition-all hover:bg-gray-100 hover:text-gray-900"
+                        className="w-25 rounded-xl bg-gray-50 py-2.5 text-[10px] font-black tracking-widest text-gray-400 uppercase transition-all hover:bg-gray-100 hover:text-gray-900"
                       >
                         Từ chối
                       </button>
