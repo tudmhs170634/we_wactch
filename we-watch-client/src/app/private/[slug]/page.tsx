@@ -197,7 +197,8 @@ export default function WeWatchRoomPage({
   // Determine host state
   useEffect(() => {
     if (room && user) {
-      const isRoomHost = room.hostId === user.username || room.host?.username === user.username;
+      const isRoomHost =
+        room.hostId === user.username || room.host?.username === user.username;
       setIsHost(isRoomHost);
     }
   }, [room, user]);
@@ -308,7 +309,11 @@ export default function WeWatchRoomPage({
           </span>
           <div className="h-4 w-px bg-white/20"></div>
           <h1 className="text-sm font-bold text-white">
-            {loading ? 'Đang tải phòng...' : room ? room.title : 'Không tìm thấy phòng'}
+            {loading
+              ? 'Đang tải phòng...'
+              : room
+                ? room.title
+                : 'Không tìm thấy phòng'}
           </h1>
           {room && (
             <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
@@ -377,20 +382,26 @@ export default function WeWatchRoomPage({
                   </div>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-black text-white">{room.host.username}</span>
-                  <span className="text-[10px] font-bold text-green-400">Online</span>
+                  <span className="text-sm font-black text-white">
+                    {room.host.username}
+                  </span>
+                  <span className="text-[10px] font-bold text-green-400">
+                    Online
+                  </span>
                 </div>
               </div>
               <div className="mt-4 flex flex-col gap-1 border-t border-white/5 pt-3">
                 <div className="flex justify-between text-[10px]">
                   <span className="text-white/40">Tham gia:</span>
-                  <span className="text-white/80">{new Date(room.createdAt).toLocaleDateString('vi-VN')}</span>
+                  <span className="text-white/80">
+                    {new Date(room.createdAt).toLocaleDateString('vi-VN')}
+                  </span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* List Phim */}
+          {/* List Video */}
           <div
             className={`glass flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5 transition-all duration-300 ${isFilmsOpen ? 'flex-1' : 'h-fit flex-none'}`}
           >
@@ -399,7 +410,7 @@ export default function WeWatchRoomPage({
               onClick={() => setIsFilmsOpen(!isFilmsOpen)}
             >
               <h3 className="text-sm font-bold tracking-wider text-white uppercase">
-                Thư viện phim
+                Thư viện video
               </h3>
               {isFilmsOpen ? (
                 <ChevronUp size={16} />
@@ -454,7 +465,7 @@ export default function WeWatchRoomPage({
               onClick={() => setIsQueueOpen(!isQueueOpen)}
             >
               <h3 className="text-sm font-bold tracking-wider text-white uppercase">
-                Phim đang xem
+                Video đang xem
               </h3>
               {isQueueOpen ? (
                 <ChevronUp size={16} />
@@ -473,27 +484,39 @@ export default function WeWatchRoomPage({
                   {/* Current Video from DB */}
                   {room?.video && (
                     <div className="flex flex-col gap-2 rounded-2xl border border-[#C800DF]/30 bg-[#C800DF]/5 p-2">
-                       <div className="relative aspect-video w-full overflow-hidden rounded-xl">
-                          <Image
-                            src={room.video.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
-                            alt={room.video.title}
-                            fill
-                            unoptimized
-                            className="object-cover"
-                          />
-                          <div className="absolute top-2 left-2 rounded-md bg-[#C800DF] px-2 py-0.5 text-[10px] font-black text-white uppercase shadow-lg">
-                            Đang chiếu
-                          </div>
-                       </div>
-                       <div className="px-1 py-1">
-                          <h4 className="text-sm font-black text-white line-clamp-1">{room.video.title}</h4>
-                          <p className="text-[10px] font-bold text-white/40 mt-0.5">Thời lượng: {room.video.duration ? Math.floor(room.video.duration / 60) + ' phút' : '--'}</p>
-                       </div>
+                      <div className="relative aspect-video w-full overflow-hidden rounded-xl">
+                        <Image
+                          src={
+                            room.video.thumbnailUrl ||
+                            MOCK_VIDEOS[0].thumbnailUrl
+                          }
+                          alt={room.video.title}
+                          fill
+                          unoptimized
+                          className="object-cover"
+                        />
+                        <div className="absolute top-2 left-2 rounded-md bg-[#C800DF] px-2 py-0.5 text-[10px] font-black text-white uppercase shadow-lg">
+                          Đang chiếu
+                        </div>
+                      </div>
+                      <div className="px-1 py-1">
+                        <h4 className="line-clamp-1 text-sm font-black text-white">
+                          {room.video.title}
+                        </h4>
+                        <p className="mt-0.5 text-[10px] font-bold text-white/40">
+                          Thời lượng:{' '}
+                          {room.video.duration
+                            ? Math.floor(room.video.duration / 60) + ' phút'
+                            : '--'}
+                        </p>
+                      </div>
                     </div>
                   )}
 
-                  <div className="h-px w-full bg-white/5 my-1"></div>
-                  <div className="text-[10px] font-black text-white/20 uppercase tracking-widest pl-1">Danh sách chờ</div>
+                  <div className="my-1 h-px w-full bg-white/5"></div>
+                  <div className="pl-1 text-[10px] font-black tracking-widest text-white/20 uppercase">
+                    Danh sách chờ
+                  </div>
 
                   {requestedVideos.map((vid) => (
                     <div
@@ -595,9 +618,9 @@ export default function WeWatchRoomPage({
             {streamUrl ? (
               <VideoPlayer src={streamUrl} poster={room?.video?.thumbnailUrl} />
             ) : room?.video ? (
-               <div className="flex h-full w-full items-center justify-center bg-white/5 animate-pulse">
-                 <Loader2 className="h-10 w-10 animate-spin text-white/20" />
-               </div>
+              <div className="flex h-full w-full animate-pulse items-center justify-center bg-white/5">
+                <Loader2 className="h-10 w-10 animate-spin text-white/20" />
+              </div>
             ) : (
               <Image
                 src={MOCK_VIDEOS[0].backdrop}
@@ -606,7 +629,6 @@ export default function WeWatchRoomPage({
                 className="object-cover opacity-80"
               />
             )}
-
           </div>
 
           {/* Member Cameras Section */}

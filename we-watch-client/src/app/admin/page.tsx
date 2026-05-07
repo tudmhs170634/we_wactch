@@ -66,7 +66,7 @@ const AdminDashboard = () => {
       }));
       setMovies(mappedMovies);
     } catch (error) {
-      toast.error('Không thể tải danh sách phim');
+      toast.error('Không thể tải danh sách video');
     } finally {
       setIsLoading(false);
     }
@@ -126,23 +126,23 @@ const AdminDashboard = () => {
   const handleApproveMovie = async (id: string) => {
     try {
       await approveVideo(id);
-      toast.success('Duyệt phim thành công');
+      toast.success('Duyệt video thành công');
       fetchMovies();
       if (selectedMovie?.id === id) setSelectedMovie(null);
     } catch (error: any) {
-      toast.error(error.message || 'Lỗi khi duyệt phim');
+      toast.error(error.message || 'Lỗi khi duyệt video');
     }
   };
 
   const handleDeleteMovie = async (id: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa phim này?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa video này?')) return;
     try {
       await deleteVideo(id);
-      toast.success('Xóa phim thành công');
+      toast.success('Xóa video thành công');
       fetchMovies();
       if (selectedMovie?.id === id) setSelectedMovie(null);
     } catch (error: any) {
-      toast.error(error.message || 'Lỗi khi xóa phim');
+      toast.error(error.message || 'Lỗi khi xóa video');
     }
   };
 

@@ -127,7 +127,10 @@ const AuthForm: React.FC<AuthFormProps> = ({
         >
           <div
             className="absolute inset-0 bg-cover bg-center opacity-50"
-            style={{ backgroundImage: "url('https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045436/wewatch/assets/background.webp')" }}
+            style={{
+              backgroundImage:
+                "url('https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778045436/wewatch/assets/background.webp')",
+            }}
           />
         </motion.div>
 
@@ -204,7 +207,7 @@ const AuthForm: React.FC<AuthFormProps> = ({
                       <p className="mt-3 text-center text-[15px] font-medium tracking-wide text-white/70">
                         {isLogin
                           ? 'Đăng nhập vào We Watch'
-                          : 'Bắt đầu hành trình xem phim'}
+                          : 'Bắt đầu hành trình xem video'}
                       </p>
                     </div>
 

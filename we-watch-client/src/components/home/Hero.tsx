@@ -50,7 +50,7 @@ const Hero = () => {
         className="flex flex-col items-center"
       >
         <span className="mb-6 rounded-full border border-[#C800DF]/30 bg-[#C800DF]/10 px-4 py-1.5 text-[10px] font-black tracking-widest text-[#C800DF] uppercase">
-          Thế hệ xem phim mới
+          Thế hệ xem video mới
         </span>
         <h1 className="text-6xl leading-none font-black tracking-tighter text-white md:text-8xl">
           We Watch <br />
@@ -83,7 +83,7 @@ const Hero = () => {
           type="text"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          placeholder="Tìm kiếm phòng, phim, bạn bè..."
+          placeholder="Tìm kiếm phòng, video, bạn bè..."
           className="glass placeholder-white-500 hidden w-full rounded-full py-4 pr-32 pl-14 text-lg text-white shadow-xl transition-all outline-none focus:border-[#C800DF]/50 focus:bg-white/10 md:block"
         />
         <input

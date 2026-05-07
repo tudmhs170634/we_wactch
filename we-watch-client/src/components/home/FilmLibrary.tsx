@@ -32,7 +32,7 @@ const FilmLibrary = ({ films, onCreateRoom }: FilmLibraryProps) => {
       <div className="mb-12 flex items-center gap-4">
         <div className="bg-primary h-2 w-2 rounded-full" />
         <h2 className="text-4xl font-black tracking-tighter text-white">
-          Thư viện <span className="text-secondary">Phim</span>
+          Thư viện <span className="text-secondary">Video</span>
         </h2>
         <div className="h-px flex-1 bg-white/20" />
         <Link
@@ -72,16 +72,16 @@ const FilmLibrary = ({ films, onCreateRoom }: FilmLibraryProps) => {
                 <button
                   onClick={() => onCreateRoom?.(film)}
                   className="relative z-20 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-lg transition-transform hover:scale-110"
-                  title="Tạo phòng xem phim này"
+                  title="Tạo phòng xem video này"
                 >
                   <Plus className="h-5 w-5" />
                 </button>
 
-                {/* ArrowRight — Chi tiết phim */}
+                {/* ArrowRight — Chi tiết video */}
                 <Link
                   href={`/videos/${film.slug}`}
                   className="relative z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-md transition-transform hover:scale-110 hover:bg-white/20"
-                  title="Xem chi tiết phim"
+                  title="Xem chi tiết video"
                 >
                   <ArrowRight className="h-5 w-5" />
                 </Link>
