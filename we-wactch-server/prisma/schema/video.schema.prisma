@@ -3,6 +3,7 @@ model Video {
   title        String
   description  String?
   videoUrl     String
+  videoKey     String
   thumbnailUrl String?
   duration     Float
   size         BigInt

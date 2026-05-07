@@ -50,7 +50,7 @@ async register (dto: RegisterDto){
     }
     const { password: _, ...userWithoutPassword } = user;
     return {
-        accessToken: this.jwt.sign({ sub: user.id, email: user.email }),
+        accessToken: this.jwt.sign({ sub: user.id, email: user.email, role: user.role }),
         user: userWithoutPassword,
     };
 }
@@ -70,7 +70,7 @@ async login(dto: LoginDto) {
 
     const { password: _, ...userWithoutPassword } = user;
     return {
-        accessToken: this.jwt.sign({ sub: user.id, email: user.email }),
+        accessToken: this.jwt.sign({ sub: user.id, email: user.email, role: user.role }),
         user: userWithoutPassword,
     };
 }
@@ -111,7 +111,8 @@ async updateProfile(userId: string, dto: UpdateProfileDto) {
     // Tạo token mới với thông tin đã cập nhật
     const newToken = this.jwt.sign({ 
         sub: user.id, 
-        email: user.email 
+        email: user.email,
+        role: user.role,
     });
 
     return {
