@@ -35,7 +35,23 @@ export class UploadService {
    * Helper to specifically upload thumbnails or other specific types if needed
    */
   async uploadThumbnail(file: Express.Multer.File) {
-    return this.uploadFile(file, 'thumbnails');
+    return new Promise<UploadApiResponse | UploadApiErrorResponse>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'thumbnails',
+          format: 'webp',
+          transformation: [
+            { width: 1280, height: 720, crop: 'fill', gravity: 'center' },
+            { quality: 'auto:good' },
+          ],
+        },
+        (error, result) => {
+          if (error || !result) return reject(error || new Error('Upload failed'));
+          resolve(result);
+        },
+      );
+      streamifier.createReadStream(file.buffer).pipe(uploadStream);
+    });
   }
 
   /**

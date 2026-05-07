@@ -1,14 +1,21 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../upload/s3.service';
+import { RedisService } from '../redis/redis.service';
 import { CreateVideoDto } from './dto/create-video.dto';
 import { UpdateVideoDto } from './dto/update-video.dto';
+import { Video } from '@prisma/client';
+
+const VIDEO_LIST_KEY = (page: number, limit: number) => `videos:list:${page}:${limit}`;
+const VIDEO_KEY = (id: string) => `videos:item:${id}`;
+const VIDEO_TTL = 60; // 60 giây
 
 @Injectable()
 export class VideoService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly s3: S3Service,
+        private readonly redis: RedisService,
     ) {}
 
     async getPresignedUrl(mimeType: string) {
@@ -16,7 +23,7 @@ export class VideoService {
     }
 
     async create(userId: string, dto: CreateVideoDto) {
-        return this.prisma.video.create({
+        const video = await this.prisma.video.create({
             data: {
                 title: dto.title,
                 description: dto.description,
@@ -28,9 +35,17 @@ export class VideoService {
                 ownerId: userId,
             },
         });
+        // Xóa cache list sau khi tạo mới
+        await this.redis.del(VIDEO_LIST_KEY(1, 12), VIDEO_LIST_KEY(1, 50));
+        return video;
     }
 
     async findAll(page = 1, limit = 12) {
+        const cacheKey = VIDEO_LIST_KEY(page, limit);
+
+        const cached = await this.redis.get(cacheKey);
+        if (cached) return cached;
+
         const skip = (page - 1) * limit;
         const [videos, total] = await Promise.all([
             this.prisma.video.findMany({
@@ -43,10 +58,17 @@ export class VideoService {
             }),
             this.prisma.video.count(),
         ]);
-        return { videos, total, page, limit };
+
+        const result = { videos, total, page, limit };
+        await this.redis.set(cacheKey, result, VIDEO_TTL);
+        return result;
     }
 
-    async findOne(id: string) {
+    async findOne(id: string): Promise<Video & { owner: { id: string; username: string; avatarUrl: string | null } }> {
+        const cacheKey = VIDEO_KEY(id);
+        const cached = await this.redis.get<any>(cacheKey);
+        if (cached) return cached;
+
         const video = await this.prisma.video.findUnique({
             where: { id },
             include: {
@@ -54,19 +76,24 @@ export class VideoService {
             },
         });
         if (!video) throw new NotFoundException('Video not found');
+
+        await this.redis.set(cacheKey, video, VIDEO_TTL);
         return video;
     }
 
     async update(id: string, userId: string, dto: UpdateVideoDto) {
         const video = await this.findOne(id);
         if (video.ownerId !== userId) throw new ForbiddenException();
-        return this.prisma.video.update({ where: { id }, data: dto });
+        const updated = await this.prisma.video.update({ where: { id }, data: dto });
+        await this.redis.del(VIDEO_KEY(id), VIDEO_LIST_KEY(1, 12), VIDEO_LIST_KEY(1, 50));
+        return updated;
     }
 
     async remove(id: string, userId: string) {
         const video = await this.findOne(id);
         if (video.ownerId !== userId) throw new ForbiddenException();
         await this.s3.deleteFile(video.videoKey);
+        await this.redis.del(VIDEO_KEY(id), VIDEO_LIST_KEY(1, 12), VIDEO_LIST_KEY(1, 50));
         return this.prisma.video.delete({ where: { id } });
     }
 }

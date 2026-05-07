@@ -59,13 +59,8 @@ export const updateProfile = async (data: Partial<RegisterCredentials>): Promise
 export const uploadImage = async (file: File): Promise<{ url: string; publicId: string }> => {
   const formData = new FormData();
   formData.append('file', file);
-  
   try {
-    const { data } = await api.post<{ url: string; publicId: string }>('/upload/image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const { data } = await api.post<{ url: string; publicId: string }>('/upload/image', formData);
     return data;
   } catch (error: any) {
     throw new Error(error.response?.data?.message || 'Upload failed');
