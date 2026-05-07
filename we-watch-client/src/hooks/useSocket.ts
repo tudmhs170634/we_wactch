@@ -16,7 +16,11 @@ export const useSocket = (roomId?: string, user?: any) => {
 
     newSocket.on('connect', () => {
       console.log('Connected to socket room:', roomId);
-      newSocket.emit('joinRoom', { roomId, username: user.username });
+      newSocket.emit('joinRoom', { 
+        roomId, 
+        username: user.username,
+        avatarUrl: user.avatarUrl 
+      });
     });
 
     newSocket.on('roomMembers', (membersList: any[]) => {

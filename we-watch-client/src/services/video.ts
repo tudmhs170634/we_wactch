@@ -48,8 +48,8 @@ export const createVideo = async (payload: VideoPayload) => {
   return data;
 };
 
-export const getVideos = async (page = 1, limit = 12) => {
-  const { data } = await api.get('/videos', { params: { page, limit } });
+export const getVideos = async (page = 1, limit = 12, search?: string) => {
+  const { data } = await api.get('/videos', { params: { page, limit, search } });
   return data;
 };
 

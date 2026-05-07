@@ -40,15 +40,22 @@ export class VideoService {
         return video;
     }
 
-    async findAll(page = 1, limit = 12) {
-        const cacheKey = VIDEO_LIST_KEY(page, limit);
+    async findAll(page = 1, limit = 12, search?: string) {
+        const cacheKey = search ? null : VIDEO_LIST_KEY(page, limit);
 
-        const cached = await this.redis.get(cacheKey);
-        if (cached) return cached;
+        if (cacheKey) {
+            const cached = await this.redis.get(cacheKey);
+            if (cached) return cached;
+        }
 
         const skip = (page - 1) * limit;
+        const where = search ? {
+            title: { contains: search, mode: 'insensitive' as const }
+        } : {};
+
         const [videos, total] = await Promise.all([
             this.prisma.video.findMany({
+                where,
                 skip,
                 take: limit,
                 orderBy: { createdAt: 'desc' },
@@ -56,11 +63,13 @@ export class VideoService {
                     owner: { select: { id: true, username: true, avatarUrl: true } },
                 },
             }),
-            this.prisma.video.count(),
+            this.prisma.video.count({ where }),
         ]);
 
         const result = { videos, total, page, limit };
-        await this.redis.set(cacheKey, result, VIDEO_TTL);
+        if (cacheKey) {
+            await this.redis.set(cacheKey, result, VIDEO_TTL);
+        }
         return result;
     }
 

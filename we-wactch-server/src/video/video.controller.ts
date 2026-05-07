@@ -32,10 +32,12 @@ export class VideoController {
     findAll(
         @Query('page') page?: string,
         @Query('limit') limit?: string,
+        @Query('search') search?: string,
     ) {
         return this.videoService.findAll(
             page ? parseInt(page) : 1,
             limit ? parseInt(limit) : 12,
+            search,
         );
     }
 

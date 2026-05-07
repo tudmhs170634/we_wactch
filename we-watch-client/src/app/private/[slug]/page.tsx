@@ -30,10 +30,12 @@ import {
   Users,
   VideoOff,
   Loader2,
+  Search,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { getRoom, getRoomBySlug } from '@/src/services/room';
+import { getVideos } from '@/src/services/video';
 import { toast } from 'sonner';
 import { useSocket } from '@/src/hooks/useSocket';
 import { useAuthStore } from '@/src/store/useAuthStore';
@@ -159,7 +161,65 @@ export default function WeWatchRoomPage({
   const [isHost, setIsHost] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Real-time members from socket
+  // Real DB Library State
+  const [libraryFilms, setLibraryFilms] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [libPage, setLibPage] = useState(1);
+  const [hasMoreLib, setHasMoreLib] = useState(true);
+  const [isLoadingLib, setIsLoadingLib] = useState(false);
+
+  const fetchLibraryData = async (page: number, search: string, isNewSearch = false) => {
+    if (isLoadingLib) return;
+    setIsLoadingLib(true);
+    try {
+      const data = await getVideos(page, 10, search);
+      if (isNewSearch) {
+        setLibraryFilms(data.videos || []);
+      } else {
+        setLibraryFilms((prev) => [...prev, ...(data.videos || [])]);
+      }
+      setHasMoreLib(data.videos?.length === 10);
+    } catch (error) {
+      console.error('Fetch library error:', error);
+    } finally {
+      setIsLoadingLib(false);
+    }
+  };
+
+  // Initial fetch
+  useEffect(() => {
+    fetchLibraryData(1, '', true);
+  }, []);
+
+  // Search debouncing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLibPage(1);
+      fetchLibraryData(1, searchQuery, true);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleLoadMore = () => {
+    if (hasMoreLib && !isLoadingLib) {
+      const nextPage = libPage + 1;
+      setLibPage(nextPage);
+      fetchLibraryData(nextPage, searchQuery);
+    }
+  };
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMyMicOn, setIsMyMicOn] = useState(true);
+  const [isMyCamOn, setIsMyCamOn] = useState(true);
+
+  const [currentFilmId, setCurrentFilmId] = useState<any>(null);
+  const [requestedVideos, setRequestedVideos] = useState(
+    MOCK_VIDEOS.slice(0, 3)
+  );
+
+  const [memberOffset, setMemberOffset] = useState(0);
+
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
   const { members: socketMembers } = useSocket(room?.id, user);
 
   useEffect(() => {
@@ -212,17 +272,8 @@ export default function WeWatchRoomPage({
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
   const [isFilmsOpen, setIsFilmsOpen] = useState(true);
   const [isQueueOpen, setIsQueueOpen] = useState(true);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isMyMicOn, setIsMyMicOn] = useState(true);
-  const [isMyCamOn, setIsMyCamOn] = useState(true);
 
-  const [currentFilmId, setCurrentFilmId] = useState<any>(null);
-  const [requestedVideos, setRequestedVideos] = useState(
-    MOCK_VIDEOS.slice(0, 3)
-  );
-  const [memberOffset, setMemberOffset] = useState(0);
 
-  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -352,43 +403,6 @@ export default function WeWatchRoomPage({
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
         {/* LEFT SIDEBAR */}
         <div className="flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden">
-          {/* Thông tin Chủ phòng */}
-          {room?.host && (
-            <div className="glass rounded-[24px] border border-white/5 bg-white/5 p-4">
-              <div className="mb-3 text-[10px] font-black tracking-widest text-white/40 uppercase">
-                Chủ phòng
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="relative h-12 w-12 overflow-hidden rounded-full border border-[#C800DF]/50 p-0.5">
-                  <div className="relative h-full w-full overflow-hidden rounded-full">
-                    {room.host.avatarUrl ? (
-                      <Image
-                        src={room.host.avatarUrl}
-                        alt={room.host.username}
-                        fill
-                        unoptimized
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-white/10">
-                        <Users size={20} className="text-white/20" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-black text-white">{room.host.username}</span>
-                  <span className="text-[10px] font-bold text-green-400">Online</span>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-col gap-1 border-t border-white/5 pt-3">
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-white/40">Tham gia:</span>
-                  <span className="text-white/80">{new Date(room.createdAt).toLocaleDateString('vi-VN')}</span>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* List Phim */}
           <div
@@ -407,39 +421,81 @@ export default function WeWatchRoomPage({
                 <ChevronDown size={16} />
               )}
             </div>
+            
             <AnimatePresence initial={false}>
               {isFilmsOpen && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="scrollbar-hide flex flex-1 flex-col gap-3 overflow-y-auto p-4"
+                  className="flex flex-1 flex-col overflow-hidden"
                 >
-                  {MOCK_FILMS.map((film) => (
-                    <div
-                      key={film.id}
-                      className="group relative flex cursor-pointer items-center gap-3 rounded-xl p-2 transition-all hover:bg-white/5"
-                    >
-                      <div className="relative h-12 w-16 flex-shrink-0 overflow-hidden rounded-lg">
-                        <Image
-                          src={film.img}
-                          alt={film.title}
-                          fill
-                          unoptimized
-                          className="object-cover"
-                        />
-                      </div>
-                      <span className="line-clamp-1 flex-1 text-xs font-bold text-white">
-                        {film.title}
-                      </span>
-                      <button
-                        onClick={() => handleAddToRequest(film.id)}
-                        className="text-[#C800DF] opacity-0 transition-opacity group-hover:opacity-100"
-                      >
-                        <Plus size={14} />
-                      </button>
+                  {/* Search Bar */}
+                  <div className="px-4 pt-4 pb-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
+                      <input 
+                        type="text" 
+                        placeholder="Tìm phim..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full rounded-xl border border-white/5 bg-white/5 py-2 pl-9 pr-4 text-[11px] text-white placeholder-white/20 outline-none focus:border-[#C800DF]/50"
+                      />
                     </div>
-                  ))}
+                  </div>
+
+                  <div 
+                    className="scrollbar-hide flex flex-1 flex-col gap-3 overflow-y-auto p-4"
+                    onScroll={(e) => {
+                      const target = e.currentTarget;
+                      if (target.scrollHeight - Math.ceil(target.scrollTop) <= target.clientHeight + 10) {
+                        handleLoadMore();
+                      }
+                    }}
+                  >
+                    {libraryFilms.map((film) => (
+                      <div
+                        key={film.id}
+                        className="group relative flex cursor-pointer items-center gap-3 rounded-xl p-2 transition-all hover:bg-white/5"
+                      >
+                        <div className="relative h-12 w-20 flex-shrink-0 overflow-hidden rounded-lg">
+                          <Image
+                            src={film.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
+                            alt={film.title}
+                            fill
+                            unoptimized
+                            className="object-cover"
+                          />
+                        </div>
+                        <div className="flex flex-1 flex-col overflow-hidden">
+                          <span className="line-clamp-1 text-xs font-bold text-white">
+                            {film.title}
+                          </span>
+                          <span className="text-[10px] text-white/40">
+                             {film.duration ? Math.floor(film.duration / 60) + ' phút' : '--'}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleAddToRequest(film.id)}
+                          className="text-[#C800DF] opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    ))}
+                    
+                    {isLoadingLib && (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-[#C800DF]" />
+                      </div>
+                    )}
+
+                    {!isLoadingLib && libraryFilms.length === 0 && (
+                      <div className="py-8 text-center text-[11px] font-bold text-white/20 italic">
+                        Không tìm thấy phim nào
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -613,10 +669,10 @@ export default function WeWatchRoomPage({
           <div className="relative flex h-36 w-full flex-shrink-0 items-center gap-3 px-4">
             {/* MY FIXED VIDEO (1/4 width) */}
             <div className="relative h-full w-1/4 flex-shrink-0 overflow-hidden rounded-[20px] border-2 border-[#C800DF]/50 bg-[#1A1A1D] shadow-[0_0_20px_rgba(200,0,223,0.15)]">
-              {isMyCamOn ? (
+              {isMyCamOn && user?.avatarUrl ? (
                 <Image
-                  src="https://scontent.fhan2-3.fna.fbcdn.net/v/t39.30808-6/475181263_1169410031565475_7208810035280146740_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=7b2446&_nc_eui2=AeGghEgzthmpLdAbI3DtlAVGMK3gCKxL64IwreAIrEvrgmJWaW26DaJNbc0RpWi7LzdFOlgWRsPNLDfsqfnD2LYs&_nc_ohc=5JyaQmWL-BQQ7kNvwEixxEe&_nc_oc=AdovOt-8DJrAV25RKj9zJTXodiFBW7tA9wz1zVoazWE1dFpuCYgoeY36KHC1yp3FrJg&_nc_zt=23&_nc_ht=scontent.fhan2-3.fna&_nc_gid=HQ7JvPqoGMHnF850t3DL_Q&_nc_ss=7b2a8&oh=00_Af4oQbLZrET-lmo1dMrfgmtUytYbDIe5H6CVkhB5IeumUA&oe=6A01DD16"
-                  alt="My Camera"
+                  src={user.avatarUrl}
+                  alt={user.username}
                   fill
                   unoptimized
                   className="object-cover"
@@ -629,7 +685,7 @@ export default function WeWatchRoomPage({
 
               <div className="absolute bottom-2 left-2 flex items-center gap-2 rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
                 <div className="h-1.5 w-1.5 rounded-full bg-[#C800DF]"></div>
-                Tôi (Bạn)
+                {user?.username || 'Bạn'} (Tôi)
               </div>
 
               <div className="absolute top-2 right-2 flex gap-1.5">
