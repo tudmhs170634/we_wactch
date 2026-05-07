@@ -32,6 +32,10 @@ const nextConfig: NextConfig = {
         hostname: '**.fbcdn.net',
         search: '',
       },
+      {
+        protocol: 'https',
+        hostname: '**.digitaloceanspaces.com',
+      },
     ],
   },
   reactStrictMode: false,

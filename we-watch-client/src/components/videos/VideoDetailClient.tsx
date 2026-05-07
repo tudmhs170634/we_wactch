@@ -57,7 +57,7 @@ export default function VideoDetailClient({ id }: { id: string }) {
         </Link>
 
         {loading && (
-          <div className="flex flex-col gap-6 animate-pulse">
+          <div className="flex animate-pulse flex-col gap-6">
             <div className="aspect-video w-full rounded-[24px] bg-white/10" />
             <div className="h-8 w-1/2 rounded bg-white/10" />
             <div className="h-4 w-full rounded bg-white/10" />
@@ -67,7 +67,10 @@ export default function VideoDetailClient({ id }: { id: string }) {
         {error && (
           <div className="rounded-[24px] border border-white/10 bg-white/5 p-10 text-center">
             <p className="text-lg font-bold text-white">Video không tồn tại.</p>
-            <Link href="/videos" className="mt-4 inline-block text-sm text-pink-400 hover:underline">
+            <Link
+              href="/videos"
+              className="mt-4 inline-block text-sm text-pink-400 hover:underline"
+            >
               Quay lại
             </Link>
           </div>
@@ -76,11 +79,15 @@ export default function VideoDetailClient({ id }: { id: string }) {
         {video && (
           <div className="flex flex-col gap-8">
             {/* Player */}
-            {streamUrl && <VideoPlayer src={streamUrl} poster={video.thumbnailUrl} />}
+            {streamUrl && (
+              <VideoPlayer src={streamUrl} poster={video.thumbnailUrl} />
+            )}
 
             {/* Info */}
             <div className="glass rounded-[28px] border border-white/10 bg-white/5 p-8">
-              <h1 className="text-3xl font-black tracking-tight text-white">{video.title}</h1>
+              <h1 className="text-3xl font-black tracking-tight text-white">
+                {video.title}
+              </h1>
 
               {/* Meta badges */}
               <div className="mt-4 flex flex-wrap gap-2">

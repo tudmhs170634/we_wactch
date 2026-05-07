@@ -6,6 +6,7 @@ model User {
   avatarUrl    String?
   role         UserRole      @default(user)
   isHost       Boolean       @default(false)
+  isBanned     Boolean       @default(false)
   videos       Video[]       @relation("UserVideos")
   ownedRooms   Room[]        @relation("HostRooms")
 

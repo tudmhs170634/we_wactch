@@ -7,7 +7,11 @@ import { usePathname } from 'next/navigation';
 const Footer = () => {
   const pathname = usePathname();
 
-  if (pathname?.includes('/private/') || pathname?.includes('/community/')) {
+  if (
+    pathname?.includes('/private/') ||
+    pathname?.includes('/community/') ||
+    pathname?.includes('/admin')
+  ) {
     return null;
   }
 
