@@ -5,13 +5,15 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Check, Search } from 'lucide-react';
+import { ArrowRight, Check, Search, Users, Shield, Plus } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
+import CreateRoomModal from '../rooms/CreateRoomModal';
 
 const Hero = () => {
   const { isAuthenticated } = useAuthStore();
   const router = useRouter();
   const [searchText, setSearchText] = useState('');
+  const [isCreateRoomModalOpen, setIsCreateRoomModalOpen] = useState(false);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +25,14 @@ const Hero = () => {
     router.push(`/videos?search=${encodeURIComponent(q)}`);
   };
 
+  const handleCreateRoomClick = () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    setIsCreateRoomModalOpen(true);
+  };
+
   return (
     <motion.section
       initial={{ opacity: 0 }}
@@ -30,14 +40,22 @@ const Hero = () => {
       transition={{ duration: 1 }}
       className="relative mx-auto flex max-w-7xl flex-col items-center px-6 pt-48 pb-20 text-center"
     >
-      <motion.h1
+      {/* Decorative Glow */}
+      <div className="absolute top-0 left-1/2 -z-10 h-[500px] w-full -translate-x-1/2 rounded-full bg-[#C800DF]/10 blur-[120px]" />
+
+      <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
-        className="text-6xl leading-none font-black tracking-tighter text-white md:text-8xl"
+        className="flex flex-col items-center"
       >
-        We Watch <br />
-      </motion.h1>
+        <span className="mb-6 rounded-full border border-[#C800DF]/30 bg-[#C800DF]/10 px-4 py-1.5 text-[10px] font-black tracking-widest text-[#C800DF] uppercase">
+          Thế hệ xem phim mới
+        </span>
+        <h1 className="text-6xl leading-none font-black tracking-tighter text-white md:text-8xl">
+          We Watch <br />
+        </h1>
+      </motion.div>
 
       <motion.p
         initial={{ opacity: 0, y: 20 }}
@@ -50,6 +68,7 @@ const Hero = () => {
         đâu.
       </motion.p>
 
+      {/* SEARCH BAR */}
       <motion.form
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -76,124 +95,104 @@ const Hero = () => {
         />
         <button
           type="submit"
-          className="bg-primary shadow-primary/20 absolute inset-y-2 right-2 cursor-pointer rounded-full px-6 text-xs font-bold text-white shadow-lg transition-transform hover:scale-105"
+          className="absolute inset-y-2 right-2 cursor-pointer rounded-full bg-[#C800DF] px-6 text-xs font-bold text-white shadow-lg shadow-[#C800DF]/20 transition-transform hover:scale-105"
         >
-          <Search className="text-white-400 h-5 w-5 transition-colors" />
+          TÌM KIẾM
         </button>
       </motion.form>
 
+      {/* 2 MAIN CALL TO ACTION OPTIONS */}
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-        className="mx-auto mt-20 grid w-full max-w-7xl grid-cols-1 gap-8 px-4 md:grid-cols-2"
+        className="mx-auto mt-20 grid w-full max-w-6xl grid-cols-1 gap-8 px-4 md:grid-cols-2"
       >
-        <div className="group relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/60 p-10 shadow-2xl backdrop-blur-xl transition-all hover:border-[#C800DF]/50">
-          <div className="pointer-events-none absolute inset-0 z-0 transition-transform duration-700 group-hover:scale-105">
-            <Image
-              src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSKQ8GIEPZq9eTqgPvdjNzNXqgJ8OsHIJrA8w&s"
-              alt="We Watch Mode background"
-              fill
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover opacity-70 transition-all duration-700 group-hover:scale-105 group-hover:opacity-100"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0B] via-[#0A0A0B]/60 to-transparent" />
-          </div>
-          <div className="absolute -top-24 -right-24 z-10 h-64 w-64 rounded-full bg-[#C800DF]/15 blur-[100px] transition-opacity group-hover:opacity-100" />
-          <div className="relative z-20 flex h-full flex-col justify-between">
-            <div>
-              <h3 className="text-3xl font-[950] tracking-tighter text-white uppercase">
-                Phòng riêng tư
-              </h3>
-              <p className="mt-4 text-[17px] font-medium text-slate-200">
-                Không gian xem phim riêng tư, bảo mật dành cho nhóm thân thiết.
-              </p>
-              <ul className="mt-8 space-y-3">
-                {[
-                  'Tối đa 5 thành viên đồng thời',
-                  'Full-sync: Mọi người đều có quyền điều khiển',
-                  'Hỗ trợ Video Call & Audio thời gian thực',
-                  'Độ trễ thấp với công nghệ WebRTC',
-                ].map((text) => (
-                  <li
-                    key={text}
-                    className="flex items-center gap-3 text-[15px] font-semibold tracking-wide text-white"
-                  >
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white">
-                      <Check className="h-3 w-3" strokeWidth={4} />
-                    </div>
-                    {text}
-                  </li>
-                ))}
-              </ul>
+        {/* Option 1: We Watch (Private) */}
+        <div
+          onClick={handleCreateRoomClick}
+          className="group relative cursor-pointer overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/40 p-10 shadow-2xl backdrop-blur-2xl transition-all hover:border-[#C800DF]/50 hover:bg-black/60"
+        >
+          <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-[#C800DF]/10 blur-[100px] transition-opacity group-hover:opacity-100" />
+
+          <div className="relative z-10 flex flex-col items-start text-left">
+            <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#C800DF]/20 text-[#C800DF]">
+              <Shield size={28} />
             </div>
-            <Link
-              href={isAuthenticated ? '/rooms/create/private' : '/login'}
-              className="group/btn mt-10 flex items-center gap-3 text-left text-[14px] font-[950] tracking-[0.2em] text-white uppercase"
-            >
-              <span className="relative">
-                Tạo phòng riêng ngay
-                <span className="absolute -bottom-1 left-0 h-[2px] w-full scale-x-0 bg-[#C800DF] transition-transform group-hover/btn:scale-x-100" />
-              </span>
-              <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-2" />
-            </Link>
+            <h3 className="text-3xl font-[950] tracking-tighter text-white uppercase">
+              Phòng Riêng Tư
+            </h3>
+            <p className="mt-4 text-base leading-relaxed font-medium text-white/60">
+              Không gian bảo mật tuyệt đối cho nhóm bạn thân. Mọi người đều có
+              quyền điều khiển video.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              {['Bảo mật', 'Full-Sync', 'Video Call'].map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold tracking-widest text-white/40 uppercase"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+
+            <div className="group/btn mt-12 flex items-center gap-4 text-[13px] font-black tracking-widest text-white uppercase">
+              Bắt đầu ngay
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 transition-all group-hover/btn:translate-x-2 group-hover/btn:bg-[#C800DF]">
+                <Plus size={18} />
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="group relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/60 p-10 shadow-2xl backdrop-blur-xl transition-all hover:border-white/30">
-          <div className="pointer-events-none absolute inset-0 z-0 transition-transform duration-700 group-hover:scale-105">
-            <Image
-              src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&q=80"
-              alt="Community Mode background"
-              fill
-              sizes="(max-width: 768px) 100vw, 50vw"
-              className="object-cover opacity-70 transition-all duration-700 group-hover:scale-105 group-hover:opacity-100"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0B] via-[#0A0A0B]/60 to-transparent" />
-          </div>
-          <div className="absolute -top-24 -right-24 z-10 h-64 w-64 rounded-full bg-white/5 blur-[100px] transition-opacity group-hover:opacity-100" />
-          <div className="relative z-20 flex h-full flex-col justify-between">
-            <div>
-              <h3 className="text-3xl font-[950] tracking-tighter text-white uppercase">
-                Phòng Cộng đồng
-              </h3>
-              <p className="mt-4 text-[17px] font-medium text-slate-200">
-                Trải nghiệm phát sóng trực tiếp và tương tác với nhiều người
-                xem.
-              </p>
-              <ul className="mt-8 space-y-3">
-                {[
-                  'Sức chứa lên tới 20 người xem',
-                  'Host-driven Sync: Điều khiển bởi chủ phòng',
-                  'Tính năng Sub-group: Chat audio nhóm riêng',
-                  'Hệ thống Emoji Rain & Chat thời gian thực',
-                ].map((text) => (
-                  <li
-                    key={text}
-                    className="flex items-center gap-3 text-[15px] font-semibold tracking-wide text-white"
-                  >
-                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-[#C800DF]/20 bg-white/20 text-white">
-                      <Check className="h-3 w-3" strokeWidth={4} />
-                    </div>
-                    {text}
-                  </li>
-                ))}
-              </ul>
+        {/* Option 2: Community (Live) */}
+        <div
+          onClick={handleCreateRoomClick}
+          className="group relative cursor-pointer overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/40 p-10 shadow-2xl backdrop-blur-2xl transition-all hover:border-white/30 hover:bg-black/60"
+        >
+          <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-white/5 blur-[100px] transition-opacity group-hover:opacity-100" />
+
+          <div className="relative z-10 flex flex-col items-start text-left">
+            <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-white">
+              <Users size={28} />
             </div>
-            <Link
-              href="/community"
-              className="group/btn mt-10 flex items-center gap-3 text-left text-[14px] font-[950] tracking-[0.2em] text-white uppercase transition-colors"
-            >
-              <span className="relative">
-                Khám phá cộng đồng
-                <span className="absolute -bottom-1 left-0 h-[2px] w-full scale-x-0 bg-white transition-transform group-hover/btn:scale-x-100 group-hover/btn:bg-[#C800DF]" />
-              </span>
-              <ArrowRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-2" />
-            </Link>
+            <h3 className="text-3xl font-[950] tracking-tighter text-white uppercase">
+              Phòng Cộng Đồng
+            </h3>
+            <p className="mt-4 text-base leading-relaxed font-medium text-white/60">
+              Phát sóng trực tiếp nội dung cho hàng chục người xem. Tương tác
+              qua Emoji và Chat audio.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              {['Public', 'Host-Only', 'Emoji Rain'].map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-bold tracking-widest text-white/40 uppercase"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+
+            <div className="group/btn mt-12 flex items-center gap-4 text-[13px] font-black tracking-widest text-white uppercase">
+              Khám phá phòng live
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 transition-all group-hover/btn:translate-x-2 group-hover/btn:bg-white group-hover/btn:text-black">
+                <ArrowRight size={18} />
+              </div>
+            </div>
           </div>
         </div>
       </motion.div>
+
+      {/* CREATE ROOM MODAL */}
+      <CreateRoomModal
+        isOpen={isCreateRoomModalOpen}
+        onClose={() => setIsCreateRoomModalOpen(false)}
+      />
     </motion.section>
   );
 };

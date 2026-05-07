@@ -27,6 +27,11 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'api.dicebear.com',
       },
+      {
+        protocol: 'https',
+        hostname: '**.fbcdn.net',
+        search: '',
+      },
     ],
   },
   reactStrictMode: false,
