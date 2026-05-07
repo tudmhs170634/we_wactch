@@ -24,10 +24,12 @@ export class RoomController {
     findAll(
         @Query('page') page?: string,
         @Query('limit') limit?: string,
+        @Query('type') type?: string,
     ) {
         return this.roomService.findAll(
             page ? parseInt(page) : 1,
             limit ? parseInt(limit) : 10,
+            type,
         );
     }
 

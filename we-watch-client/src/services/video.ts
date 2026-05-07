@@ -53,13 +53,28 @@ export const getVideos = async (page = 1, limit = 12) => {
   return data;
 };
 
+export const getVideosAdmin = async (page = 1, limit = 50) => {
+  const { data } = await api.get('/videos/admin', { params: { page, limit } });
+  return data;
+};
+
 export const getVideo = async (id: string) => {
   const { data } = await api.get(`/videos/${id}`);
   return data;
 };
 
+export const getStreamUrl = async (id: string) => {
+  const { data } = await api.get(`/videos/${id}/stream-url`);
+  return data;
+};
+
 export const updateVideo = async (id: string, payload: Partial<VideoPayload>) => {
   const { data } = await api.patch(`/videos/${id}`, payload);
+  return data;
+};
+
+export const approveVideo = async (id: string) => {
+  const { data } = await api.patch(`/videos/${id}/approve`);
   return data;
 };
 

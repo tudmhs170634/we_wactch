@@ -90,7 +90,10 @@ export default function VideoDetailClient({ id }: { id: string }) {
           <div className="rounded-[24px] border border-white/10 bg-white/5 p-10 text-center">
             <Film className="mx-auto mb-4 h-12 w-12 text-white/20" />
             <p className="text-lg font-bold text-white">Video không tồn tại.</p>
-            <Link href="/videos" className="mt-4 inline-block text-sm text-pink-400 hover:underline">
+            <Link
+              href="/videos"
+              className="mt-4 inline-block text-sm text-pink-400 hover:underline"
+            >
               Quay lại
             </Link>
           </div>

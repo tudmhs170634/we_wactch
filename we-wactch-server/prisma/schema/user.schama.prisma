@@ -6,9 +6,11 @@ model User {
   avatarUrl  String?
   role       UserRole @default(user)
   isHost     Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
   isBanned   Boolean  @default(false)
+  
   ownedRooms Room[]   @relation("HostRooms")
   videos     Video[]  @relation("UserVideos")
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

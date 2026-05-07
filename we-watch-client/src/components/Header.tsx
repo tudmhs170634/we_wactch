@@ -50,7 +50,6 @@ const Header = () => {
         setIsMenuOpen(false);
       }
     };
-    console.log('realUser', realUser);
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);

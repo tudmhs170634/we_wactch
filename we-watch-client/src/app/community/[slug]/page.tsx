@@ -40,7 +40,7 @@ const MOCK_CHAT = [
     user: 'Trung',
     role: 'host',
     avatar: 'https://i.pravatar.cc/150?u=1',
-    message: 'Chào mừng mọi người đến với phòng phim nhé!',
+    message: 'Chào mừng mọi người đến với phòng video nhé!',
     type: 'msg',
   },
   {
@@ -48,7 +48,7 @@ const MOCK_CHAT = [
     user: 'AnhKhoa',
     role: 'viewer',
     avatar: 'https://i.pravatar.cc/150?u=2',
-    message: 'Phim nét quá host ơi',
+    message: 'Video nét quá host ơi',
     type: 'msg',
   },
   {
