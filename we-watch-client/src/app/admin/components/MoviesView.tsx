@@ -54,18 +54,18 @@ const MoviesView: React.FC<MoviesViewProps> = ({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-2xl font-black text-gray-900">{title}</h4>
+          <h4 className="text-2xl font-black text-white">{title}</h4>
           <p className="text-sm font-medium text-gray-400">{subtitle}</p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2 text-xs font-black tracking-widest text-red-600 uppercase">
+        <div className="flex items-center gap-2 rounded-xl bg-primary/20 px-4 py-2 text-xs font-black tracking-widest text-primary uppercase">
           <Film size={14} /> {filteredMovies.length}{' '}
           {type === 'queue' ? 'Chờ duyệt' : 'Tổng số'}
         </div>
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl bg-white py-20 shadow-sm">
-          <Loader2 size={40} className="mb-4 animate-spin text-red-600" />
+        <div className="flex flex-col items-center justify-center rounded-3xl bg-[#111113] border border-white/5 py-20 shadow-sm">
+          <Loader2 size={40} className="mb-4 animate-spin text-primary" />
           <p className="text-sm font-bold tracking-widest text-gray-400 uppercase">
             Đang tải nội dung...
           </p>
@@ -75,19 +75,19 @@ const MoviesView: React.FC<MoviesViewProps> = ({
           {filteredMovies.map((movie) => (
             <div
               key={movie.id}
-              className="group flex overflow-hidden rounded-3xl bg-white shadow-sm transition-all hover:shadow-xl hover:shadow-gray-100"
+              className="group flex overflow-hidden rounded-3xl bg-[#111113] border border-white/5 shadow-sm transition-all hover:shadow-lg hover:shadow-primary/5"
             >
-              <div className="relative aspect-video w-72 overflow-hidden bg-gray-100">
+              <div className="relative aspect-video w-72 overflow-hidden bg-white/10">
                 <Image
                   src={movie.thumbnailUrl}
                   alt={movie.title}
                   fill
                   className="object-cover transition-transform group-hover:scale-105"
                 />
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
                   <button
                     onClick={() => onSelectMovie(movie)}
-                    className="flex h-12 w-12 scale-75 transform items-center justify-center rounded-full bg-white text-red-600 shadow-xl transition-transform group-hover:scale-100"
+                    className="flex h-12 w-12 scale-75 transform items-center justify-center rounded-full bg-[#111113] border border-white/5 text-primary shadow-xl transition-transform group-hover:scale-100"
                   >
                     <Eye size={24} />
                   </button>
@@ -100,13 +100,13 @@ const MoviesView: React.FC<MoviesViewProps> = ({
                 <div>
                   <button
                     onClick={() => onSelectMovie(movie)}
-                    className="line-clamp-1 text-left text-lg font-black text-gray-900 transition-colors hover:text-red-600"
+                    className="line-clamp-1 text-left text-lg font-black text-white transition-colors hover:text-primary"
                   >
                     {movie.title}
                   </button>
                   <p className="mt-1 flex items-center gap-2 text-sm font-medium text-gray-400">
                     <UserCircle size={14} /> Tải lên bởi{' '}
-                    <span className="font-bold text-gray-900">
+                    <span className="font-bold text-white">
                       {movie.uploader}
                     </span>{' '}
                     • {movie.createdAt}
@@ -117,13 +117,13 @@ const MoviesView: React.FC<MoviesViewProps> = ({
                     <>
                       <button
                         onClick={() => onApprove(movie.id)}
-                        className="w-25 rounded-xl bg-red-600 py-2.5 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-red-100 transition-all hover:bg-red-700"
+                        className="w-25 rounded-xl bg-primary py-2.5 text-[10px] font-black tracking-widest text-white uppercase shadow-lg shadow-primary/20 transition-all hover:brightness-110"
                       >
                         Duyệt video
                       </button>
                       <button
                         onClick={() => onDelete(movie.id)}
-                        className="w-25 rounded-xl bg-gray-50 py-2.5 text-[10px] font-black tracking-widest text-gray-400 uppercase transition-all hover:bg-gray-100 hover:text-gray-900"
+                        className="w-25 rounded-xl bg-white/5 py-2.5 text-[10px] font-black tracking-widest text-gray-400 uppercase transition-all hover:bg-white/10 hover:text-white"
                       >
                         Từ chối
                       </button>
@@ -131,7 +131,7 @@ const MoviesView: React.FC<MoviesViewProps> = ({
                   ) : (
                     <button
                       onClick={() => onDelete(movie.id)}
-                      className="w-25 rounded-xl bg-red-50 py-2.5 text-[10px] font-black tracking-widest text-red-600 uppercase transition-all hover:bg-red-100"
+                      className="w-25 rounded-xl bg-primary/20 py-2.5 text-[10px] font-black tracking-widest text-primary uppercase transition-all hover:bg-red-100"
                     >
                       Gỡ bỏ
                     </button>
@@ -141,7 +141,7 @@ const MoviesView: React.FC<MoviesViewProps> = ({
             </div>
           ))}
           {filteredMovies.length === 0 && (
-            <div className="rounded-3xl bg-white py-20 text-center font-bold tracking-widest text-gray-400 uppercase shadow-sm">
+            <div className="rounded-3xl bg-[#111113] border border-white/5 py-20 text-center font-bold tracking-widest text-gray-400 uppercase shadow-sm">
               Không tìm thấy video nào
             </div>
           )}
