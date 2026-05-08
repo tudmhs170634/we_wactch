@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MOCK_VIDEOS, MOCK_ROOMS } from '@/src/constants/mockData';
 import Link from 'next/link';
 import Image from 'next/image';
+import Select from '@/src/components/ui/Select';
 import {
   Play,
   Pause,
@@ -27,7 +28,6 @@ import {
   ScreenShare,
   UserMinus,
   Settings,
-  Link as LinkIcon,
   Check,
   Copy,
   UserPlus,
@@ -388,10 +388,18 @@ export default function CommunityRoomPage({
                       <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">
                         Chế độ phòng
                       </span>
-                      <select className="rounded-lg border border-white/10 bg-white/5 p-2 text-xs text-white outline-none">
-                        <option>Cộng đồng (Mặc định)</option>
-                        <option>Giới hạn độ tuổi</option>
-                      </select>
+                      <Select<'community' | 'age_limit'>
+                        value={'community'}
+                        onChange={() => {}}
+                        options={[
+                          { value: 'community', label: 'Cộng đồng (Mặc định)' },
+                          { value: 'age_limit', label: 'Giới hạn độ tuổi' },
+                        ]}
+                        buttonClassName="rounded-lg px-3 py-2 text-xs font-bold"
+                        menuClassName="rounded-lg"
+                        optionClassName="text-xs"
+                        disabled
+                      />
                     </div>
                     <div className="flex items-center justify-between text-xs font-medium text-white/60">
                       <span>Phê duyệt chat</span>

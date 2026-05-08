@@ -44,24 +44,24 @@ const DashboardView: React.FC<DashboardViewProps> = ({ stats }) => {
 
   return (
     <div className="space-y-10">
-      <h2 className="text-3xl font-black tracking-tight text-gray-900">
+      <h2 className="text-3xl font-black tracking-tight text-white">
         Tổng quan hiệu suất
       </h2>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((stat, i) => (
           <div
             key={i}
-            className="group relative rounded-3xl bg-white p-8 shadow-sm transition-all hover:shadow-xl"
+            className="group relative rounded-3xl bg-[#111113] border border-white/5 p-8 shadow-sm transition-all hover:shadow-xl"
           >
             <div className="flex items-center justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20 text-primary">
                 <stat.icon size={24} />
               </div>
               <span
                 className={`rounded-full px-2 py-1 text-xs font-black ${
                   stat.trend === 'up'
-                    ? 'bg-red-50 text-red-600'
-                    : 'bg-gray-50 text-gray-400'
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-white/5 text-gray-400'
                 }`}
               >
                 {stat.change}
@@ -71,7 +71,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ stats }) => {
               <p className="text-[10px] font-black tracking-widest text-gray-400 uppercase">
                 {stat.label}
               </p>
-              <h3 className="mt-2 text-3xl font-black text-gray-900">
+              <h3 className="mt-2 text-3xl font-black text-white">
                 {stat.value}
               </h3>
             </div>

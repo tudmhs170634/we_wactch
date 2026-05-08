@@ -39,13 +39,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <div className="fixed top-0 left-0 h-screen w-64 border-r border-gray-100 bg-white px-6 py-8">
+    <div className="fixed top-0 left-0 h-screen w-64 border border-r border-white/5 border-white/10 bg-[#111113] px-6 py-8">
       <div className="mb-12 flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-red-200">
+        <div className="bg-primary shadow-primary/20 flex h-10 w-10 items-center justify-center rounded-full text-white shadow-lg">
           <TrendingUp size={24} />
         </div>
         <div>
-          <h1 className="text-lg font-black tracking-tight text-gray-900">
+          <h1 className="text-lg font-black tracking-tight text-white">
             We Watch
           </h1>
           <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">
@@ -64,22 +64,22 @@ const Sidebar: React.FC<SidebarProps> = ({
             }}
             className={`group relative flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold transition-all ${
               activeTab === item.id
-                ? 'bg-gray-50 text-red-600'
-                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                ? 'text-primary bg-white/5'
+                : 'text-gray-400 hover:bg-white/5 hover:text-white'
             }`}
           >
             {activeTab === item.id && (
               <motion.div
                 layoutId="activeTabIndicator"
-                className="absolute top-0 left-0 h-full w-1 rounded-r-full bg-red-600"
+                className="bg-primary absolute top-0 left-0 h-full w-1 rounded-r-full"
               />
             )}
             <item.icon
               size={20}
               className={
                 activeTab === item.id
-                  ? 'text-red-600'
-                  : 'text-gray-400 group-hover:text-gray-900'
+                  ? 'text-primary'
+                  : 'text-gray-400 group-hover:text-white'
               }
             />
             {item.label}
@@ -90,7 +90,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="absolute right-6 bottom-8 left-6">
         <button
           onClick={onLogout}
-          className="group flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold text-gray-400 transition-all hover:bg-red-50 hover:text-red-600"
+          className="group hover:bg-primary/20 hover:text-primary flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-semibold text-gray-400 transition-all"
         >
           <LogOut size={20} />
           Đăng xuất

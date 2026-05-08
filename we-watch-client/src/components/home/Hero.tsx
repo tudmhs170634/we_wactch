@@ -49,9 +49,6 @@ const Hero = () => {
         transition={{ duration: 0.8 }}
         className="flex flex-col items-center"
       >
-        <span className="mb-6 rounded-full border border-[#C800DF]/30 bg-[#C800DF]/10 px-4 py-1.5 text-[10px] font-black tracking-widest text-[#C800DF] uppercase">
-          Thế hệ xem video mới
-        </span>
         <h1 className="text-6xl leading-none font-black tracking-tighter text-white md:text-8xl">
           We Watch <br />
         </h1>

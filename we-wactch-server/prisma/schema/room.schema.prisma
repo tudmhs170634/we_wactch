@@ -2,6 +2,7 @@ model Room {
   id        String   @id @default(uuid()) @db.Uuid
   title     String
   slug      String   @unique
+  image     String?
   type      RoomType @default(private)
   hostId    String?  @db.Uuid
   videoId   String?  @db.Uuid

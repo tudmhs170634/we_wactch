@@ -37,17 +37,17 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }} 
         animate={{ opacity: 1, scale: 1 }} 
-        className="w-full max-w-md overflow-hidden rounded-[32px] bg-white shadow-2xl"
+        className="w-full max-w-md overflow-hidden rounded-[32px] bg-[#111113] border border-white/5 shadow-2xl"
       >
         <div className="relative h-32 bg-gradient-to-r from-red-600 to-red-400">
           <button 
             onClick={onClose} 
-            className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-black/10 text-white transition-colors hover:bg-black/20"
+            className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-black/10 text-white transition-colors hover:bg-black/40"
           >
             <XCircle size={20} />
           </button>
           <div className="absolute -bottom-12 left-1/2 -translate-x-1/2">
-            <div className="group relative h-24 w-24 overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
+            <div className="group relative h-24 w-24 overflow-hidden rounded-3xl border-4 border-white bg-[#111113] border border-white/5 shadow-xl">
               <Image 
                 src={editAvatar || 'https://i.pravatar.cc/150'} 
                 alt="Avatar" 
@@ -73,7 +73,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
         </div>
         <form onSubmit={onSubmit} className="px-8 pt-16 pb-8">
           <div className="mb-8 text-center">
-            <h3 className="text-xl font-black text-gray-900">Chỉnh sửa hồ sơ</h3>
+            <h3 className="text-xl font-black text-white">Chỉnh sửa hồ sơ</h3>
             <p className="text-xs font-medium text-gray-400 mt-1">Cập nhật thông tin nhận diện của bạn</p>
           </div>
           <div className="space-y-4">
@@ -83,7 +83,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                 type="text" 
                 value={editName} 
                 onChange={(e) => setEditName(e.target.value)} 
-                className="h-12 w-full rounded-xl border-2 border-transparent bg-gray-50 px-5 text-sm font-bold text-gray-900 transition-all outline-none focus:border-red-100" 
+                className="h-12 w-full rounded-xl border-2 border-transparent bg-white/5 px-5 text-sm font-bold text-white transition-all outline-none focus:border-primary/20" 
               />
             </div>
           </div>
@@ -91,14 +91,14 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
             <button 
               type="button" 
               onClick={onClose} 
-              className="flex-1 rounded-xl bg-gray-100 py-3.5 text-xs font-black tracking-widest text-gray-400 uppercase transition-colors hover:bg-gray-200"
+              className="flex-1 rounded-xl bg-white/10 py-3.5 text-xs font-black tracking-widest text-gray-400 uppercase transition-colors hover:bg-gray-200"
             >
               Hủy bỏ
             </button>
             <button 
               type="submit" 
               disabled={isUpdating} 
-              className="flex flex-1 items-center justify-center rounded-xl bg-red-600 py-3.5 text-xs font-black tracking-widest text-white uppercase shadow-lg shadow-red-100 hover:bg-red-700 disabled:opacity-50"
+              className="flex flex-1 items-center justify-center rounded-xl bg-primary py-3.5 text-xs font-black tracking-widest text-white uppercase shadow-lg shadow-primary/20 hover:brightness-110 disabled:opacity-50"
             >
               {isUpdating ? <Loader2 size={16} className="animate-spin" /> : 'Lưu thay đổi'}
             </button>

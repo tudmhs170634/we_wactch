@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { UploadService } from '../upload/upload.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { Room, RoomType } from '@prisma/client';
@@ -38,14 +39,25 @@ export class RoomService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly redis: RedisService,
+        private readonly uploadService: UploadService,
     ) {}
 
-    async create(userId: string, dto: CreateRoomDto) {
+    async create(userId: string, dto: CreateRoomDto, imageFile?: Express.Multer.File) {
         if (dto.type === 'private' && !dto.password) {
             throw new BadRequestException('Phòng private phải có password.');
         }
 
         const slug = slugify(dto.title);
+
+        let imageUrl: string | null = dto.imageUrl?.trim() ? dto.imageUrl.trim() : null;
+        if (imageFile) {
+            const uploaded = await this.uploadService.uploadFile(imageFile, 'rooms');
+            if ('secure_url' in uploaded && uploaded.secure_url) {
+                imageUrl = uploaded.secure_url;
+            } else {
+                throw new BadRequestException('Upload ảnh thất bại.');
+            }
+        }
 
         const room = await this.prisma.room.create({
             data: {
@@ -56,6 +68,7 @@ export class RoomService {
                 videoId: dto.videoId ?? null,
                 password: dto.password ?? null,
                 maxUsers: dto.maxUsers ?? 5,
+                image: imageUrl,
             },
             include: {
                 host: { select: { id: true, username: true, avatarUrl: true } },

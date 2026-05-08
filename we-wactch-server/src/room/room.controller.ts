@@ -1,7 +1,9 @@
 import {
     Controller, Get, Post, Patch, Delete,
-    Body, Param, Query, UseGuards,
+    Body, Param, Query, UseGuards, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { RoomService } from './room.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
@@ -15,8 +17,18 @@ export class RoomController {
     /** POST /rooms — Tạo phòng mới (cần login) */
     @Post()
     @UseGuards(JwtAuthGuard)
-    create(@GetUser() user: any, @Body() dto: CreateRoomDto) {
-        return this.roomService.create(user.userId, dto);
+    @UseInterceptors(
+        FileInterceptor('image', {
+            storage: memoryStorage(),
+            limits: { fileSize: 2 * 1024 * 1024 },
+        }),
+    )
+    create(
+        @GetUser() user: any,
+        @Body() dto: CreateRoomDto,
+        @UploadedFile() image?: Express.Multer.File,
+    ) {
+        return this.roomService.create(user.userId, dto, image);
     }
 
     /** GET /rooms — Danh sách phòng active */
