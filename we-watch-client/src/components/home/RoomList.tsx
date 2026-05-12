@@ -24,7 +24,7 @@ interface RoomListProps {
 
 const RoomList = ({ rooms, isAuthenticated = true }: RoomListProps) => {
   const [activeTab, setActiveTab] = useState<'community' | 'private'>(
-    'community'
+    'private'
   );
 
   const filteredRooms = rooms.filter((r) =>
@@ -40,7 +40,7 @@ const RoomList = ({ rooms, isAuthenticated = true }: RoomListProps) => {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-50px' }}
       transition={{ duration: 0.8, ease: 'easeOut' }}
-      className="mx-auto w-full max-w-7xl px-6 pt-48 pb-20"
+      className="mx-auto w-full max-w-7xl px-6 pt-10 pb-20"
     >
       <div className="mb-12 flex flex-col items-center justify-between gap-6 md:flex-row">
         <div>
