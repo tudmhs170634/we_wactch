@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Router from 'next/router';
 import {
   Mail,
   Lock,
@@ -96,7 +97,7 @@ const AuthForm: React.FC<AuthFormProps> = ({
 
         const destination =
           res.user.role === 'admin' ? '/admin' : callbackUrl || '/';
-        window.location.href = destination;
+        router.push(destination);
       } else {
         const res = await register({ email, username, password, avatarUrl });
         console.log('Register response:', res);
