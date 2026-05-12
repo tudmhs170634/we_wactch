@@ -39,8 +39,9 @@ import { getVideos } from '@/src/services/video';
 import { toast } from 'sonner';
 import { useSocket } from '@/src/hooks/useSocket';
 import { useAuthStore } from '@/src/store/useAuthStore';
-import VideoPlayer from '@/src/components/videos/VideoPlayer';
+import LiveKitRoom from '@/src/components/rooms/LiveKitRoom';
 import api from '@/src/lib/axios';
+import VideoPlayer from '@/src/components/videos/VideoPlayer';
 
 const MOCK_MEMBERS = [
   {
@@ -217,6 +218,7 @@ export default function WeWatchRoomPage({
   );
 
   const [memberOffset, setMemberOffset] = useState(0);
+  const [liveKitToken, setLiveKitToken] = useState<string>('');
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
@@ -267,6 +269,17 @@ export default function WeWatchRoomPage({
     if (room) {
       console.log('Room loaded in UI:', room);
       console.log('Video URL:', room.video?.videoUrl);
+      
+      // Fetch LiveKit Token
+      const fetchLKToken = async () => {
+        try {
+          const res = await api.get(`/livekit/token?roomName=${room.id}`);
+          setLiveKitToken(res.data.token);
+        } catch (err) {
+          console.error('Failed to fetch LiveKit token:', err);
+        }
+      };
+      fetchLKToken();
     }
   }, [room]);
 
@@ -680,98 +693,13 @@ export default function WeWatchRoomPage({
             )}
           </div>
 
-          {/* Member Cameras Section */}
+          {/* Member Cameras Section (LiveKit) */}
           <div className="relative flex h-36 w-full flex-shrink-0 items-center gap-3 px-4">
-            {/* MY FIXED VIDEO (1/4 width) */}
-            <div className="relative h-full w-1/4 flex-shrink-0 overflow-hidden rounded-[20px] border-2 border-[#C800DF]/50 bg-[#1A1A1D] shadow-[0_0_20px_rgba(200,0,223,0.15)]">
-              {isMyCamOn && user?.avatarUrl ? (
-                <Image
-                  src={user.avatarUrl}
-                  alt={user.username}
-                  fill
-                  unoptimized
-                  className="object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-white/5">
-                  <Users size={24} className="text-white/10" />
-                </div>
-              )}
-
-              <div className="absolute bottom-2 left-2 flex items-center gap-2 rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
-                <div className="h-1.5 w-1.5 rounded-full bg-[#C800DF]"></div>
-                {user?.username || 'Bạn'} (Tôi)
-              </div>
-
-              <div className="absolute top-2 right-2 flex gap-1.5">
-                <button
-                  onClick={() => setIsMyMicOn(!isMyMicOn)}
-                  className={`flex h-7 w-7 items-center justify-center rounded-full transition-all ${isMyMicOn ? 'bg-black/40 text-white hover:bg-black/60' : 'bg-red-500 text-white'}`}
-                >
-                  {isMyMicOn ? <Mic size={12} /> : <MicOff size={12} />}
-                </button>
-                <button
-                  onClick={() => setIsMyCamOn(!isMyCamOn)}
-                  className={`flex h-7 w-7 items-center justify-center rounded-full transition-all ${isMyCamOn ? 'bg-black/40 text-white hover:bg-black/60' : 'bg-red-500 text-white'}`}
-                >
-                  {isMyCamOn ? <Video size={12} /> : <VideoOff size={12} />}
-                </button>
-              </div>
-            </div>
-
-            {/* PREV BUTTON (Placed after My Video) */}
-            <div className="relative flex h-full items-center pl-7">
-              <div className="h-2/3 w-px bg-white/10"></div>
-              <button
-                onClick={handlePrevMembers}
-                disabled={memberOffset === 0}
-                className={`absolute left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-white/10 bg-[#1A1A1D] text-white shadow-xl transition-all hover:scale-110 hover:bg-[#C800DF] active:scale-95 disabled:pointer-events-none disabled:opacity-0`}
-              >
-                <ChevronLeft size={16} />
-              </button>
-            </div>
-
-            {/* OTHER MEMBERS (Real-time from Socket) */}
-            <div className="flex h-full flex-1 gap-3 overflow-hidden">
-              {socketMembers
-                .filter((m) => m.username !== user?.username)
-                .slice(memberOffset, memberOffset + 3)
-                .map((m, idx) => (
-                  <div
-                    key={m.username || idx}
-                    className="relative basis-1/3 overflow-hidden rounded-[20px] border border-white/10 bg-[#1A1A1D]"
-                  >
-                    {m.avatarUrl ? (
-                      <Image
-                        src={m.avatarUrl}
-                        alt={m.username}
-                        fill
-                        unoptimized
-                        className="object-cover opacity-80"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-white/5">
-                        <Users size={24} className="text-white/10" />
-                      </div>
-                    )}
-                    <div className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
-                      {m.username || 'User'}
-                    </div>
-                  </div>
-                ))}
-            </div>
-
-            {/* NEXT BUTTON (Far right) */}
-            <button
-              onClick={handleNextMembers}
-              disabled={
-                memberOffset >=
-                MOCK_MEMBERS.filter((m) => m.id !== 1).length - 3
-              }
-              className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#1A1A1D] text-white shadow-xl transition-all hover:scale-110 hover:bg-[#C800DF] active:scale-95 disabled:pointer-events-none disabled:opacity-0`}
-            >
-              <ChevronRight size={16} />
-            </button>
+            <LiveKitRoom 
+              roomName={room?.id || params.slug}
+              token={liveKitToken}
+              onDisconnect={() => setLiveKitToken('')}
+            />
           </div>
         </div>
 

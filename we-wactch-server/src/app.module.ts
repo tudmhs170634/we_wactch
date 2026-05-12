@@ -7,6 +7,7 @@ import { VideoModule } from './video/video.module';
 import { RedisModule } from './redis/redis.module';
 import { UserModule } from './user/user.module';
 import { RoomModule } from './room/room.module';
+import { LiveKitModule } from './livekit/livekit.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { RoomModule } from './room/room.module';
     VideoModule,
     UserModule,
     RoomModule,
+    LiveKitModule,
   ],
   controllers: [AppController],
   providers: [AppService],
