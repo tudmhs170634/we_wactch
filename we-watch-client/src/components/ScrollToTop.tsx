@@ -19,7 +19,7 @@ const ScrollToTop = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Hide in room pages
+  // Ẩn nút ScrollToTop trong các trang phòng xem phim để tránh che mất các nút điều khiển video
   if (pathname?.includes('/private/') || pathname?.includes('/community/')) {
     return null;
   }
