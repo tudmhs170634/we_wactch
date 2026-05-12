@@ -32,12 +32,12 @@ interface CreateRoomModalProps {
 }
 
 const PRESET_BANNERS = [
-  'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&q=80',
-  'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=800&q=80',
-  'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=800&q=80',
-  'https://images.unsplash.com/photo-1541562232579-512a21360020?w=800&q=80',
-  'https://images.unsplash.com/photo-1524985069026-dd778a71c7b4?w=800&q=80',
-  'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778145555/t%E1%BA%A3i_xu%E1%BB%91ng_1_xbtw9h.jpg',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778145554/t%E1%BA%A3i_xu%E1%BB%91ng_2_c6tkc1.jpg',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778145551/AESTHETIC_WALLPAPER_pnx9a4.jpg',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778145552/t%E1%BA%A3i_xu%E1%BB%91ng_3_afrps5.jpg',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778145550/t%E1%BA%A3i_xu%E1%BB%91ng_4_ckpukp.jpg',
+  'https://res.cloudinary.com/dzjmyqqdh/image/upload/v1778145550/t%E1%BA%A3i_xu%E1%BB%91ng_5_tnxswu.jpg',
 ];
 
 export default function CreateRoomModal({
@@ -69,6 +69,7 @@ export default function CreateRoomModal({
   );
   const [videoSearch, setVideoSearch] = useState('');
   const [videoList, setVideoList] = useState<any[]>([]);
+  const [videoLoading, setVideoLoading] = useState(false);
   const [videoPickerOpen, setVideoPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -81,6 +82,13 @@ export default function CreateRoomModal({
 
   const [bannerMode, setBannerMode] = useState<'upload' | 'preset'>('preset');
   const [selectedBanner, setSelectedBanner] = useState(PRESET_BANNERS[0]);
+  const [uploadedBannerFile, setUploadedBannerFile] = useState<File | null>(
+    null
+  );
+  const [uploadedBannerPreview, setUploadedBannerPreview] = useState<
+    string | null
+  >(null);
+  const bannerInputRef = useRef<HTMLInputElement>(null);
 
   const [maxUsers, setMaxUsers] = useState(5);
 
@@ -109,9 +117,24 @@ export default function CreateRoomModal({
   // Fetch video list for picker
   useEffect(() => {
     if (!videoPickerOpen) return;
+    let cancelled = false;
+    setVideoLoading(true);
     getVideos(1, 50)
-      .then((res) => setVideoList(res.videos ?? []))
-      .catch(() => {});
+      .then((res) => {
+        if (cancelled) return;
+        setVideoList(res.videos ?? []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setVideoList([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setVideoLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [videoPickerOpen]);
 
   // Close picker when clicking outside
@@ -139,6 +162,11 @@ export default function CreateRoomModal({
         password: tab === 'private' ? password : undefined,
         maxUsers,
         videoId: selectedVideo?.id,
+        imageUrl: bannerMode === 'preset' ? selectedBanner : undefined,
+        imageFile:
+          bannerMode === 'upload'
+            ? (uploadedBannerFile ?? undefined)
+            : undefined,
       });
       console.log('Room created:', room);
       toast.success('Tạo phòng thành công!');
@@ -164,13 +192,13 @@ export default function CreateRoomModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+        className="fixed inset-0 z-200 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 20 }}
-          className="relative w-full max-w-lg overflow-hidden rounded-[32px] border border-white/10 bg-[#0A0A0B]/90 shadow-2xl backdrop-blur-xl"
+          className="rounded-bento-lg relative flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden border border-white/10 bg-[#0A0A0B]/90 shadow-2xl backdrop-blur-xl"
         >
           <button
             onClick={onClose}
@@ -204,7 +232,10 @@ export default function CreateRoomModal({
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6 p-8">
+          <form
+            onSubmit={handleSubmit}
+            className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-8"
+          >
             <div className="flex flex-col gap-2">
               <label className="text-sm font-bold text-white/80">
                 Tên phòng
@@ -278,7 +309,7 @@ export default function CreateRoomModal({
               {selectedVideo ? (
                 <div className="flex items-center gap-3 rounded-[16px] border border-[#C800DF]/30 bg-[#C800DF]/5 px-4 py-2.5">
                   {selectedVideo.thumbnailUrl ? (
-                    <div className="relative h-9 w-14 flex-shrink-0 overflow-hidden rounded-lg">
+                    <div className="relative h-9 w-14 shrink-0 overflow-hidden rounded-lg">
                       <Image
                         src={selectedVideo.thumbnailUrl}
                         alt={selectedVideo.title}
@@ -330,51 +361,59 @@ export default function CreateRoomModal({
                       />
                     </div>
                     <div className="scrollbar-hide max-h-40 overflow-y-auto">
-                      {videoList
-                        .filter((v) =>
-                          v.title
-                            .toLowerCase()
-                            .includes(videoSearch.toLowerCase())
-                        )
-                        .map((v) => (
-                          <button
-                            key={v.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedVideo(v);
-                              setVideoPickerOpen(false);
-                              setVideoSearch('');
-                            }}
-                            className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
-                          >
-                            {v.thumbnailUrl ? (
-                              <div className="relative h-8 w-12 flex-shrink-0 overflow-hidden rounded-md">
-                                <Image
-                                  src={v.thumbnailUrl}
-                                  alt={v.title}
-                                  fill
-                                  className="object-cover"
-                                />
-                              </div>
-                            ) : (
-                              <Film size={16} className="text-white/30" />
-                            )}
-                            <span className="line-clamp-1 flex-1 text-sm font-medium text-white">
-                              {v.title}
-                            </span>
-                            {selectedVideo?.id === v.id && (
-                              <Check size={14} className="text-[#C800DF]" />
-                            )}
-                          </button>
-                        ))}
-                      {videoList.filter((v) =>
-                        v.title
-                          .toLowerCase()
-                          .includes(videoSearch.toLowerCase())
-                      ).length === 0 && (
+                      {videoLoading ? (
                         <p className="px-4 py-3 text-xs text-white/30">
-                          Không tìm thấy video.
+                          Đang tải video…
                         </p>
+                      ) : (
+                        <>
+                          {videoList
+                            .filter((v) =>
+                              v.title
+                                .toLowerCase()
+                                .includes(videoSearch.toLowerCase())
+                            )
+                            .map((v) => (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedVideo(v);
+                                  setVideoPickerOpen(false);
+                                  setVideoSearch('');
+                                }}
+                                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+                              >
+                                {v.thumbnailUrl ? (
+                                  <div className="relative h-8 w-12 shrink-0 overflow-hidden rounded-md">
+                                    <Image
+                                      src={v.thumbnailUrl}
+                                      alt={v.title}
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </div>
+                                ) : (
+                                  <Film size={16} className="text-white/30" />
+                                )}
+                                <span className="line-clamp-1 flex-1 text-sm font-medium text-white">
+                                  {v.title}
+                                </span>
+                                {selectedVideo?.id === v.id && (
+                                  <Check size={14} className="text-[#C800DF]" />
+                                )}
+                              </button>
+                            ))}
+                          {videoList.filter((v) =>
+                            v.title
+                              .toLowerCase()
+                              .includes(videoSearch.toLowerCase())
+                          ).length === 0 && (
+                            <p className="px-4 py-3 text-xs text-white/30">
+                              Không tìm thấy video.
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   </motion.div>
@@ -412,11 +451,59 @@ export default function CreateRoomModal({
               </div>
 
               {bannerMode === 'upload' ? (
-                <div className="mt-2 flex h-24 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[16px] border-2 border-dashed border-white/20 bg-white/5 transition-all hover:border-white/40 hover:bg-white/10">
-                  <Upload size={20} className="text-white/40" />
-                  <span className="text-xs text-white/40">
-                    Nhấp để tải ảnh lên (Max 2MB)
-                  </span>
+                <div className="mt-2 space-y-3">
+                  <input
+                    ref={bannerInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 2 * 1024 * 1024) {
+                        toast.error('Ảnh tối đa 2MB.');
+                        e.target.value = '';
+                        return;
+                      }
+                      setUploadedBannerFile(file);
+                      const url = URL.createObjectURL(file);
+                      setUploadedBannerPreview(url);
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => bannerInputRef.current?.click()}
+                    className="flex h-24 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[16px] border-2 border-dashed border-white/20 bg-white/5 transition-all hover:border-white/40 hover:bg-white/10"
+                  >
+                    <Upload size={20} className="text-white/40" />
+                    <span className="text-xs text-white/40">
+                      Nhấp để tải ảnh lên (Max 2MB)
+                    </span>
+                  </button>
+
+                  {uploadedBannerPreview && (
+                    <div className="relative h-28 w-full overflow-hidden rounded-[16px] border border-white/10">
+                      <Image
+                        src={uploadedBannerPreview}
+                        alt="Banner preview"
+                        fill
+                        className="object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUploadedBannerFile(null);
+                          setUploadedBannerPreview(null);
+                          if (bannerInputRef.current)
+                            bannerInputRef.current.value = '';
+                        }}
+                        className="absolute top-3 right-3 rounded-full bg-black/60 px-3 py-1 text-xs font-bold text-white/80 hover:bg-black/70"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="scrollbar-hide mt-2 flex gap-3 overflow-x-auto pb-2">
@@ -425,7 +512,7 @@ export default function CreateRoomModal({
                       key={idx}
                       type="button"
                       onClick={() => setSelectedBanner(url)}
-                      className={`relative h-16 w-28 flex-shrink-0 overflow-hidden rounded-xl border-2 transition-all ${
+                      className={`relative h-16 w-28 shrink-0 overflow-hidden rounded-xl border-2 transition-all ${
                         selectedBanner === url
                           ? 'border-[#C800DF]'
                           : 'border-transparent opacity-50 hover:opacity-100'
@@ -479,7 +566,7 @@ export default function CreateRoomModal({
             <button
               type="submit"
               disabled={loading}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#C800DF] to-[#E60076] py-4 text-sm font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-linear-to-r from-[#C800DF] to-[#E60076] py-4 text-sm font-bold text-white shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               {tab === 'private' ? 'Tạo Phòng We Watch' : 'Tạo Phòng Community'}

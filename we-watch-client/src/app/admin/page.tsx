@@ -207,7 +207,7 @@ const AdminDashboard = () => {
   };
 
   return (
-    <main className="min-h-screen bg-[#F8F9FA] font-sans text-gray-900">
+    <main className="min-h-screen bg-background font-sans text-white">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -249,10 +249,10 @@ const AdminDashboard = () => {
               exit={{ opacity: 0, y: -10 }}
             >
               {isLoading && (
-                <div className="flex flex-col items-center justify-center rounded-3xl bg-white py-20 shadow-sm">
+                <div className="flex flex-col items-center justify-center rounded-3xl bg-[#111113] border border-white/5 py-20 shadow-sm">
                   <Loader2
                     size={40}
-                    className="mb-4 animate-spin text-red-600"
+                    className="mb-4 animate-spin text-primary"
                   />
                   <p className="text-xs font-black tracking-widest text-gray-400 uppercase">
                     Đang tải dữ liệu hệ thống...

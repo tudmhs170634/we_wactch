@@ -2,10 +2,11 @@ import api from '../lib/axios';
 
 export interface Room {
   id: string;
-  name: string;
+  title: string;
   type: 'public' | 'private';
   hostId: string;
   videoId?: string;
+  image?: string | null;
   createdAt: string;
   host?: {
     username: string;
@@ -19,15 +20,30 @@ export interface CreateRoomPayload {
   videoId?: string;
   password?: string;
   maxUsers?: number;
+  imageUrl?: string;
+  imageFile?: File;
 }
 
 export const createRoom = async (payload: CreateRoomPayload) => {
-  const { data } = await api.post('/rooms', payload);
+  const form = new FormData();
+  form.append('title', payload.title);
+  if (payload.type) form.append('type', payload.type);
+  if (payload.videoId) form.append('videoId', payload.videoId);
+  if (payload.password) form.append('password', payload.password);
+  if (typeof payload.maxUsers === 'number') form.append('maxUsers', String(payload.maxUsers));
+  if (payload.imageUrl) form.append('imageUrl', payload.imageUrl);
+  if (payload.imageFile) form.append('image', payload.imageFile);
+
+  const { data } = await api.post('/rooms', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 };
 
 export const getRooms = async (page = 1, limit = 10, type?: string) => {
-  const { data } = await api.get('/rooms', { params: { page, limit, type } });
+  const params: any = { page, limit };
+  if (type) params.type = type;
+  const { data } = await api.get('/rooms', { params });
   return data;
 };
 
