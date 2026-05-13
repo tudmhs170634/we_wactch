@@ -34,8 +34,12 @@ const ROOM_KEY = (id: string) => `rooms:item:${id}`;
 const ROOM_SLUG_KEY = (slug: string) => `rooms:slug:${slug}`;
 const TTL = 60;
 
+import { Subject } from 'rxjs';
+
 @Injectable()
 export class RoomService {
+  public readonly roomListUpdated$ = new Subject<void>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,

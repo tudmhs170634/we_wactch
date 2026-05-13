@@ -604,15 +604,15 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     }
 
     @SubscribeMessage('endRoom')
-    handleEndRoom(
+    async handleEndRoom(
         @ConnectedSocket() client: Socket,
         @MessageBody() data: { roomId: string },
     ) {
         const { roomId } = data;
         // Broadcast cho tất cả người trong phòng biết phòng đã kết thúc
         this.server.to(roomId).emit('roomEnded');
-        // Dọn sạch bộ nhớ
-        this.roomMembers.delete(roomId);
-        this.logger.log(`Room ${roomId} ended by host`);
+        // Dọn sạch dữ liệu phòng trên Redis (members, chat, wishlist)
+        await this.redis.delPattern(`ww:room:${roomId}:*`);
+        this.logger.log(`Room ${roomId} ended by host and Redis data cleared`);
     }
 }

@@ -3,9 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-export const useSocket = (roomId?: string, user?: any, onRoomEnded?: () => void) => {
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [members, setMembers] = useState<any[]>([]);
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {
@@ -43,7 +40,12 @@ export interface RoomMember {
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
 
-export const useSocket = (roomId?: string, user?: any, password?: string) => {
+export const useSocket = (
+  roomId?: string,
+  user?: any,
+  password?: string,
+  onRoomEnded?: () => void
+) => {
   const socketRef = useRef<Socket | null>(null);
 
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -103,11 +105,10 @@ export const useSocket = (roomId?: string, user?: any, password?: string) => {
     });
 
     // Lắng nghe khi host kết thúc phòng
-    newSocket.on('roomEnded', () => {
+    socket.on('roomEnded', () => {
       onRoomEnded?.();
     });
 
-    setSocket(newSocket);
     // ── Chat ─────────────────────────────────────────────────────────────────
     socket.on('chatHistory', (history: ChatMessage[]) => {
       setMessages(history);
