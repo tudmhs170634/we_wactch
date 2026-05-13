@@ -122,7 +122,7 @@ export class RoomService {
         // Inject current user count from Redis (Unique usernames)
         const roomsWithCount = await Promise.all(
             rooms.map(async (room) => {
-                const keys = await this.redis.keys(`room:${room.id}:members:*`);
+                const keys = await this.redis.keys(`ww:room:${room.id}:members:*`);
                 const usernames = new Set<string>();
                 
                 // Lấy tất cả thông tin thành viên song song để tối ưu hiệu năng

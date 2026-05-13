@@ -268,9 +268,14 @@ export default function WeWatchRoomPage({
 
   useEffect(() => {
     if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+      const timer = setTimeout(() => {
+        if (chatScrollRef.current) {
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+      }, 100);
+      return () => clearTimeout(timer);
     }
-  }, [messages, activeTab]);
+  }, [messages, activeTab, visibleStatusIds]);
 
   useEffect(() => {
     if (!videoRef.current) return;
