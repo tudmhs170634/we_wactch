@@ -1,20 +1,36 @@
-import React from 'react';
-import { PlayCircle, Trash2, MonitorPlay } from 'lucide-react'; // Thêm icon dự phòng
+import React, { useState, useEffect } from 'react';
+import { PlayCircle, Trash2, MonitorPlay } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image'; // Sử dụng Next Image để tối ưu hiệu năng
-import { Room } from '@/src/services/room';
+import Image from 'next/image';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { getRooms, Room } from '@/src/services/room';
 
 interface RoomsViewProps {
-  rooms: Room[];
+  globalSearchTerm: string;
   filterType: string;
   onFilterChange: (type: string) => void;
 }
 
 const RoomsView: React.FC<RoomsViewProps> = ({
-  rooms,
+  globalSearchTerm,
   filterType,
   onFilterChange,
 }) => {
+  const [page, setPage] = useState(1);
+  const cleanSearch = globalSearchTerm?.trim() || '';
+
+  useEffect(() => {
+    setPage(1);
+  }, [cleanSearch, filterType]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-rooms', filterType, page, 9, cleanSearch],
+    queryFn: () =>
+      getRooms(page, 9, filterType || undefined, cleanSearch || undefined),
+    placeholderData: keepPreviousData,
+  });
+
+  const roomsList: Room[] = data?.rooms || [];
   return (
     <div className="space-y-6">
       {/* Header & Filter */}
@@ -51,7 +67,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
 
       {/* Rooms Grid */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {rooms.map((room) => (
+        {roomsList.map((room) => (
           <div
             key={room.id}
             className="group overflow-hidden rounded-3xl border border-white/5 bg-[#111113] shadow-sm transition-all hover:shadow-xl"
@@ -111,12 +127,67 @@ const RoomsView: React.FC<RoomsViewProps> = ({
           </div>
         ))}
 
-        {rooms.length === 0 && (
+        {roomsList.length === 0 && (
           <div className="col-span-full rounded-3xl border border-white/5 bg-[#111113] py-20 text-center font-bold tracking-widest text-gray-400 uppercase shadow-sm">
             Không có phòng nào đang hoạt động
           </div>
         )}
       </div>
+      {/* PAGINATION */}
+      {data?.totalPages > 1 && (
+        <div className="flex items-center justify-center border-t border-white/5 p-6">
+          <div className="flex items-center gap-1.5">
+            {/* Nút Back */}
+            <button
+              disabled={page === 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="flex h-8 items-center justify-center gap-1 rounded-md border border-white/10 bg-transparent px-3 text-xs font-medium text-white transition-colors hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40"
+            >
+              <span className="text-gray-500">&lt;</span> Back
+            </button>
+
+            {/* Các số trang */}
+            {(() => {
+              const total = data.totalPages;
+              let pages = [];
+
+              // Thuật toán hiển thị tối đa 5 trang xung quanh trang hiện tại
+              if (total <= 5) {
+                pages = Array.from({ length: total }, (_, i) => i + 1);
+              } else if (page <= 3) {
+                pages = [1, 2, 3, 4, 5];
+              } else if (page >= total - 2) {
+                pages = [total - 4, total - 3, total - 2, total - 1, total];
+              } else {
+                pages = [page - 2, page - 1, page, page + 1, page + 2];
+              }
+
+              return pages.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`flex h-8 min-w-[32px] items-center justify-center rounded-md border text-xs font-bold transition-colors ${
+                    page === p
+                      ? 'border-white bg-white text-black shadow-sm'
+                      : 'border-white/10 bg-transparent text-gray-400 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  {p}
+                </button>
+              ));
+            })()}
+
+            {/* Nút Next */}
+            <button
+              disabled={page === data.totalPages}
+              onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
+              className="flex h-8 items-center justify-center gap-1 rounded-md border border-white/10 bg-transparent px-3 text-xs font-medium text-white transition-colors hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40"
+            >
+              Next <span className="text-gray-500">&gt;</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

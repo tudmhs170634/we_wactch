@@ -40,16 +40,23 @@ export const createRoom = async (payload: CreateRoomPayload) => {
   return data;
 };
 
-export const getRooms = async (page = 1, limit = 10, type?: string) => {
+export const getRooms = async (
+  page = 1,
+  limit = 10,
+  type?: string,
+  search?: string
+) => {
   const params: any = { page, limit };
   if (type) params.type = type;
-  const { data } = await api.get('/rooms', { params });
+  const { data } = await api.get('/rooms', {
+    params: { page, limit, type, search },
+  });
   return data;
 };
 
 // Hàm bổ sung để tương thích với code Admin — trả về mảng rooms thay vì object phân trang
-export const getAllRooms = async (type?: string): Promise<Room[]> => {
-  const res = await getRooms(1, 100, type);
+export const getAllRooms = async (type?: string, search?: string): Promise<Room[]> => {
+  const res = await getRooms(1, 100, type, search);
   return res.rooms ?? [];
 };
 

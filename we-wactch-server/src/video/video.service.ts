@@ -82,21 +82,23 @@ export class VideoService {
     return result;
   }
 
-  async findAllAdmin(page = 1, limit = 50) {
-    const skip = (page - 1) * limit;
+  async findAllAdmin(page = 1, limit = 50, search?: string) {
+    const where = search
+      ? { title: { contains: search, mode: 'insensitive' as const } }
+      : {};
     const [videos, total] = await Promise.all([
       this.prisma.video.findMany({
-        skip,
+        where,
+        skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
         include: {
           owner: { select: { id: true, username: true, avatarUrl: true } },
         },
+        orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.video.count(),
+      this.prisma.video.count({ where }),
     ]);
-
-    return { videos, total, page, limit };
+    return { videos, total, page, totalPages: Math.ceil(total / limit) };
   }
 
   async approve(id: string) {

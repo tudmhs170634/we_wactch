@@ -16,6 +16,7 @@ import {
 import { updateProfile, uploadImage, logout } from '@/src/services/auth';
 import { getAllUsers, banUser, switchRole, User } from '@/src/services/user';
 import { getAllRooms, Room } from '@/src/services/room';
+import { useDebounce } from '@/src/hooks/useDebounce';
 
 // Components
 import Sidebar, { TabType } from './components/Sidebar';
@@ -40,16 +41,20 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [currentStreamUrl, setCurrentStreamUrl] = useState<string | null>(null);
   const [roomFilter, setRoomFilter] = useState('');
+  const [globalSearchTerm, setGlobalSearchTerm] = useState('');
+
+  const debouncedSearch = useDebounce(globalSearchTerm, 500);
+  const cleanSearch = debouncedSearch.trim();
 
   // Auth Store
   const { user, login: updateLocalUser } = useAuthStore();
 
   // --- Fetchers ---
 
-  const fetchMovies = useCallback(async () => {
+  const fetchMovies = useCallback(async (searchStr?: string) => {
     setIsLoading(true);
     try {
-      const data = await getVideosAdmin(1, 100);
+      const data = await getVideosAdmin(1, 100, searchStr);
       const videoList = data.videos || [];
       const mappedMovies = videoList.map((v: any) => ({
         id: v.id,
@@ -84,10 +89,10 @@ const AdminDashboard = () => {
     }
   }, []);
 
-  const fetchRooms = useCallback(async (type?: string) => {
+  const fetchRooms = useCallback(async (type?: string, searchStr?: string) => {
     setIsLoading(true);
     try {
-      const data = await getAllRooms(type);
+      const data = await getAllRooms(type, searchStr);
       setRooms(data);
     } catch (error) {
       toast.error('Không thể tải danh sách phòng');
@@ -102,13 +107,13 @@ const AdminDashboard = () => {
       // Fetch everything for dashboard stats
       Promise.all([fetchMovies(), fetchUsers(), fetchRooms()]);
     } else if (activeTab === 'all_movies' || activeTab === 'movie_queue') {
-      fetchMovies();
+      fetchMovies(cleanSearch || undefined);
     } else if (activeTab === 'users') {
-      fetchUsers();
+      // UsersView tự xử lý qua React Query nên không cần gọi ở đây nữa
     } else if (activeTab === 'rooms') {
-      fetchRooms(roomFilter);
+      fetchRooms(roomFilter, cleanSearch || undefined);
     }
-  }, [activeTab, roomFilter, fetchMovies, fetchUsers, fetchRooms]);
+  }, [activeTab, roomFilter, cleanSearch, fetchMovies, fetchUsers, fetchRooms]);
 
   // Security Link Fetcher
   useEffect(() => {
@@ -206,11 +211,24 @@ const AdminDashboard = () => {
     }
   };
 
+  const getSearchPlaceholder = () => {
+    switch (activeTab) {
+      case 'users': return 'Tìm username hoặc email...';
+      case 'rooms': return 'Tìm tên phòng chiếu...';
+      case 'all_movies':
+      case 'movie_queue': return 'Tìm tiêu đề video...';
+      default: return 'Tìm kiếm dữ liệu...';
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background font-sans text-white">
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={(tab) => {
+          setGlobalSearchTerm('');
+          setActiveTab(tab);
+        }}
         setSelectedMovie={setSelectedMovie}
         onLogout={() => logout()}
       />
@@ -223,6 +241,9 @@ const AdminDashboard = () => {
             setEditAvatar(user?.avatarUrl || '');
             setIsProfileModalOpen(true);
           }}
+          searchTerm={globalSearchTerm}
+          onSearchChange={setGlobalSearchTerm}
+          placeholder={getSearchPlaceholder()}
         />
 
         <AnimatePresence mode="wait">
@@ -275,7 +296,7 @@ const AdminDashboard = () => {
                   )}
                   {activeTab === 'users' && (
                     <UsersView
-                      users={users}
+                      globalSearchTerm={globalSearchTerm}
                       onBanUser={handleBanUser}
                       onSwitchRole={handleSwitchRole}
                     />
@@ -283,8 +304,7 @@ const AdminDashboard = () => {
                   {activeTab === 'all_movies' && (
                     <MoviesView
                       type="all"
-                      movies={movies}
-                      isLoading={isLoading}
+                      globalSearchTerm={cleanSearch}
                       onSelectMovie={setSelectedMovie}
                       onApprove={handleApproveMovie}
                       onDelete={handleDeleteMovie}
@@ -293,8 +313,7 @@ const AdminDashboard = () => {
                   {activeTab === 'movie_queue' && (
                     <MoviesView
                       type="queue"
-                      movies={movies}
-                      isLoading={isLoading}
+                      globalSearchTerm={cleanSearch}
                       onSelectMovie={setSelectedMovie}
                       onApprove={handleApproveMovie}
                       onDelete={handleDeleteMovie}
@@ -302,7 +321,7 @@ const AdminDashboard = () => {
                   )}
                   {activeTab === 'rooms' && (
                     <RoomsView
-                      rooms={rooms}
+                      globalSearchTerm={cleanSearch}
                       filterType={roomFilter}
                       onFilterChange={setRoomFilter}
                     />

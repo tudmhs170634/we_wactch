@@ -36,170 +36,217 @@ const TTL = 60;
 
 @Injectable()
 export class RoomService {
-    constructor(
-        private readonly prisma: PrismaService,
-        private readonly redis: RedisService,
-        private readonly uploadService: UploadService,
-    ) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+    private readonly uploadService: UploadService,
+  ) {}
 
-    async create(userId: string, dto: CreateRoomDto, imageFile?: Express.Multer.File) {
-        if (dto.type === 'private' && !dto.password) {
-            throw new BadRequestException('Phòng private phải có password.');
-        }
+  async create(
+    userId: string,
+    dto: CreateRoomDto,
+    imageFile?: Express.Multer.File,
+  ) {
+    if (dto.type === 'private' && !dto.password) {
+      throw new BadRequestException('Phòng private phải có password.');
+    }
 
-        const slug = slugify(dto.title);
+    const slug = slugify(dto.title);
 
-        let imageUrl: string | null = dto.imageUrl?.trim() ? dto.imageUrl.trim() : null;
-        if (imageFile) {
-            const uploaded = await this.uploadService.uploadFile(imageFile, 'rooms');
-            if ('secure_url' in uploaded && uploaded.secure_url) {
-                imageUrl = uploaded.secure_url;
-            } else {
-                throw new BadRequestException('Upload ảnh thất bại.');
-            }
-        }
+    let imageUrl: string | null = dto.imageUrl?.trim()
+      ? dto.imageUrl.trim()
+      : null;
+    if (imageFile) {
+      const uploaded = await this.uploadService.uploadFile(imageFile, 'rooms');
+      if ('secure_url' in uploaded && uploaded.secure_url) {
+        imageUrl = uploaded.secure_url;
+      } else {
+        throw new BadRequestException('Upload ảnh thất bại.');
+      }
+    }
 
-        const room = await this.prisma.room.create({
-            data: {
-                title: dto.title,
-                slug,
-                type: (dto.type as RoomType) ?? RoomType.public,
-                hostId: userId,
-                videoId: dto.videoId ?? null,
-                password: dto.password ?? null,
-                maxUsers: dto.maxUsers ?? 5,
-                image: imageUrl,
+    const room = await this.prisma.room.create({
+      data: {
+        title: dto.title,
+        slug,
+        type: (dto.type as RoomType) ?? RoomType.public,
+        hostId: userId,
+        videoId: dto.videoId ?? null,
+        password: dto.password ?? null,
+        maxUsers: dto.maxUsers ?? 5,
+        image: imageUrl,
+      },
+      include: {
+        host: { select: { id: true, username: true, avatarUrl: true } },
+        video: {
+          select: { id: true, title: true, thumbnailUrl: true, videoUrl: true },
+        },
+      },
+    });
+
+    // Xóa cache list
+    await this.redis.del(
+      ROOM_LIST_KEY(1, 10),
+      ROOM_LIST_KEY(1, 20),
+      ROOM_LIST_KEY(1, 100),
+    );
+    return room;
+  }
+
+  async findAll(
+    page = 1,
+    limit = 10,
+    type?: string,
+    search?: string,
+    onlyActive = false,
+  ) {
+    const cacheKey = search ? null : ROOM_LIST_KEY(page, limit, type);
+    if (cacheKey) {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) return cached;
+    }
+
+    const skip = (page - 1) * limit;
+    const where: any = {};
+    if (onlyActive) where.isActive = true;
+    if (type) {
+      if (type !== RoomType.private && type !== RoomType.public) {
+        throw new BadRequestException('Invalid room type');
+      }
+      where.type = type as RoomType;
+    }
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' as const } },
+        { slug: { contains: search, mode: 'insensitive' as const } },
+      ];
+    }
+
+    const [rooms, total] = await Promise.all([
+      this.prisma.room.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          host: { select: { id: true, username: true, avatarUrl: true } },
+          video: {
+            select: {
+              id: true,
+              title: true,
+              thumbnailUrl: true,
+              videoUrl: true,
             },
-            include: {
-                host: { select: { id: true, username: true, avatarUrl: true } },
-                video: { select: { id: true, title: true, thumbnailUrl: true, videoUrl: true } },
-            },
-        });
+          },
+        },
+      }),
+      this.prisma.room.count({ where }),
+    ]);
 
-        // Xóa cache list
-        await this.redis.del(ROOM_LIST_KEY(1, 10), ROOM_LIST_KEY(1, 20), ROOM_LIST_KEY(1, 100));
-        return room;
+    const result = {
+      rooms,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+    if (cacheKey) await this.redis.set(cacheKey, result, TTL);
+    return result;
+  }
+
+  async findOne(id: string): Promise<RoomWithRelations> {
+    const cached = await this.redis.get<RoomWithRelations>(ROOM_KEY(id));
+    if (cached) return cached;
+
+    const room = await this.prisma.room.findUnique({
+      where: { id },
+      include: {
+        host: { select: { id: true, username: true, avatarUrl: true } },
+        video: {
+          select: { id: true, title: true, thumbnailUrl: true, videoUrl: true },
+        },
+      },
+    });
+    if (!room) throw new NotFoundException('Room not found');
+
+    await this.redis.set(ROOM_KEY(id), room, TTL);
+    return room;
+  }
+
+  async findBySlug(slug: string): Promise<RoomWithRelations> {
+    const cached = await this.redis.get<RoomWithRelations>(ROOM_SLUG_KEY(slug));
+    if (cached) return cached;
+
+    const room = await this.prisma.room.findUnique({
+      where: { slug },
+      include: {
+        host: { select: { id: true, username: true, avatarUrl: true } },
+        video: {
+          select: { id: true, title: true, thumbnailUrl: true, videoUrl: true },
+        },
+      },
+    });
+    if (!room) throw new NotFoundException('Room not found');
+
+    await this.redis.set(ROOM_SLUG_KEY(slug), room, TTL);
+    return room;
+  }
+
+  async update(id: string, userId: string, dto: UpdateRoomDto) {
+    const room = await this.findOne(id);
+    if (room.hostId !== userId) throw new ForbiddenException();
+
+    if (dto.type === 'private' && !dto.password && !room.password) {
+      throw new BadRequestException('Phòng private phải có password.');
     }
 
-    async findAll(page = 1, limit = 10, type?: string, onlyActive = false) {
-        const cacheKey = ROOM_LIST_KEY(page, limit, type);
-        const cached = await this.redis.get(cacheKey);
-        if (cached) return cached;
+    const updated = await this.prisma.room.update({
+      where: { id },
+      data: {
+        title: dto.title,
+        type: dto.type as RoomType,
+        videoId: dto.videoId,
+        password: dto.password,
+        maxUsers: dto.maxUsers,
+        isActive: dto.isActive,
+      },
+      include: {
+        host: { select: { id: true, username: true, avatarUrl: true } },
+        video: {
+          select: { id: true, title: true, thumbnailUrl: true, videoUrl: true },
+        },
+      },
+    });
 
-        const skip = (page - 1) * limit;
-        const where: any = {};
-        if (onlyActive) where.isActive = true;
-        if (type) {
-            if (type !== RoomType.private && type !== RoomType.public) {
-                throw new BadRequestException('Invalid room type');
-            }
-            where.type = type as RoomType;
-        }
+    await this.redis.del(
+      ROOM_KEY(id),
+      ROOM_SLUG_KEY(room.slug),
+      ROOM_LIST_KEY(1, 10),
+      ROOM_LIST_KEY(1, 20),
+    );
+    return updated;
+  }
 
-        const [rooms, total] = await Promise.all([
-            this.prisma.room.findMany({
-                where,
-                skip,
-                take: limit,
-                orderBy: { createdAt: 'desc' },
-                include: {
-                    host: { select: { id: true, username: true, avatarUrl: true } },
-                    video: { select: { id: true, title: true, thumbnailUrl: true, videoUrl: true } },
-                },
-            }),
-            this.prisma.room.count({ where }),
-        ]);
+  async remove(id: string, userId: string) {
+    const room = await this.findOne(id);
+    if (room.hostId !== userId) throw new ForbiddenException();
 
-        const result = { rooms, total, page, limit };
-        await this.redis.set(cacheKey, result, TTL);
-        return result;
-    }
+    await this.prisma.room.delete({ where: { id } });
+    await this.redis.del(
+      ROOM_KEY(id),
+      ROOM_SLUG_KEY(room.slug),
+      ROOM_LIST_KEY(1, 10),
+      ROOM_LIST_KEY(1, 20),
+    );
+    return { message: 'Room deleted' };
+  }
 
-    async findOne(id: string): Promise<RoomWithRelations> {
-        const cached = await this.redis.get<RoomWithRelations>(ROOM_KEY(id));
-        if (cached) return cached;
-
-        const room = await this.prisma.room.findUnique({
-            where: { id },
-            include: {
-                host: { select: { id: true, username: true, avatarUrl: true } },
-                video: { select: { id: true, title: true, thumbnailUrl: true, videoUrl: true } },
-            },
-        });
-        if (!room) throw new NotFoundException('Room not found');
-
-        await this.redis.set(ROOM_KEY(id), room, TTL);
-        return room;
-    }
-
-    async findBySlug(slug: string): Promise<RoomWithRelations> {
-        const cached = await this.redis.get<RoomWithRelations>(ROOM_SLUG_KEY(slug));
-        if (cached) return cached;
-
-        const room = await this.prisma.room.findUnique({
-            where: { slug },
-            include: {
-                host: { select: { id: true, username: true, avatarUrl: true } },
-                video: { select: { id: true, title: true, thumbnailUrl: true, videoUrl: true } },
-            },
-        });
-        if (!room) throw new NotFoundException('Room not found');
-
-        await this.redis.set(ROOM_SLUG_KEY(slug), room, TTL);
-        return room;
-    }
-
-    async update(id: string, userId: string, dto: UpdateRoomDto) {
-        const room = await this.findOne(id);
-        if (room.hostId !== userId) throw new ForbiddenException();
-
-        if (dto.type === 'private' && !dto.password && !room.password) {
-            throw new BadRequestException('Phòng private phải có password.');
-        }
-
-        const updated = await this.prisma.room.update({
-            where: { id },
-            data: {
-                title: dto.title,
-                type: dto.type as RoomType,
-                videoId: dto.videoId,
-                password: dto.password,
-                maxUsers: dto.maxUsers,
-                isActive: dto.isActive,
-            },
-            include: {
-                host: { select: { id: true, username: true, avatarUrl: true } },
-                video: { select: { id: true, title: true, thumbnailUrl: true, videoUrl: true } },
-            },
-        });
-
-        await this.redis.del(
-            ROOM_KEY(id),
-            ROOM_SLUG_KEY(room.slug),
-            ROOM_LIST_KEY(1, 10),
-            ROOM_LIST_KEY(1, 20),
-        );
-        return updated;
-    }
-
-    async remove(id: string, userId: string) {
-        const room = await this.findOne(id);
-        if (room.hostId !== userId) throw new ForbiddenException();
-
-        await this.prisma.room.delete({ where: { id } });
-        await this.redis.del(
-            ROOM_KEY(id),
-            ROOM_SLUG_KEY(room.slug),
-            ROOM_LIST_KEY(1, 10),
-            ROOM_LIST_KEY(1, 20),
-        );
-        return { message: 'Room deleted' };
-    }
-
-    async verifyPassword(id: string, password: string) {
-        const room = await this.findOne(id);
-        if (room.type === 'public') return { ok: true };
-        if (room.password !== password) throw new ForbiddenException('Sai mật khẩu phòng.');
-        return { ok: true };
-    }
+  async verifyPassword(id: string, password: string) {
+    const room = await this.findOne(id);
+    if (room.type === 'public') return { ok: true };
+    if (room.password !== password)
+      throw new ForbiddenException('Sai mật khẩu phòng.');
+    return { ok: true };
+  }
 }
