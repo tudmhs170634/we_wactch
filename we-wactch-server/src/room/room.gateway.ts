@@ -246,19 +246,7 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     }
 
     async onModuleInit() {
-        this.logger.log('RoomGateway initialized. Cleaning up stale Redis data...');
-        // Xóa tất cả key thành viên khi server khởi động lại (tránh ghost members nếu server sập)
-        const memberKeys = await this.redis.keys('ww:room:*:members*');
-        const locationKeys = await this.redis.keys('ww:user:*:location');
-        
-        if (memberKeys.length > 0) {
-            await Promise.all(memberKeys.map(key => this.redis.del(key)));
-            this.logger.log(`Cleared ${memberKeys.length} stale member keys.`);
-        }
-        if (locationKeys.length > 0) {
-            await Promise.all(locationKeys.map(key => this.redis.del(key)));
-            this.logger.log(`Cleared ${locationKeys.length} stale location keys.`);
-        }
+        this.logger.log('RoomGateway initialized.');
 
         // Đăng ký theo dõi thay đổi danh sách phòng từ RoomService
         this.roomService.roomListUpdated$.subscribe(() => {
@@ -368,31 +356,34 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
         const members = await this.getRoomMembers(roomId);
         this.server.to(roomId).emit('roomMembers', members);
-        this.server.to(roomId).emit('userJoined', { username, avatarUrl, role });
+        
+        if (!isAlreadyIn) {
+            this.server.to(roomId).emit('userJoined', { username, avatarUrl, role });
+
+            // Gửi system message và lưu vào history
+            const systemMsg: ChatMessage = {
+                id: `sys_${Date.now()}`,
+                roomId,
+                username: 'system',
+                message: `${username} đã tham gia phòng`,
+                type: 'status',
+                timestamp: Date.now(),
+            };
+            await this.redis.lpush(ROOM_CHAT_KEY(roomId), systemMsg, MAX_CHAT_MESSAGES);
+            await this.redis.expire(ROOM_CHAT_KEY(roomId), CHAT_TTL);
+            this.server.to(roomId).emit('newMessage', systemMsg);
+        }
         
         // Notify global rooms list
         await this.notifyRoomsList(roomId);
 
-        // Gửi lịch sử chat từ Redis cho client mới join
+        // Gửi lịch sử chat từ Redis cho client mới join (sau khi đã có thể thêm tin nhắn system mới)
         const history = await this.redis.lrange<ChatMessage>(ROOM_CHAT_KEY(roomId), 0, 49);
         client.emit('chatHistory', history);
 
         // Gửi wishlist hiện tại cho client mới join
         const wishlist = await this.redis.lrange<WishlistVideo>(ROOM_WISHLIST_KEY(roomId), 0, -1);
         client.emit('wishlistSync', wishlist);
-
-        // System message
-        const systemMsg: ChatMessage = {
-            id: `sys_${Date.now()}`,
-            roomId,
-            username: 'system',
-            message: `${username} đã tham gia phòng`,
-            type: 'status',
-            timestamp: Date.now(),
-        };
-        await this.redis.lpush(ROOM_CHAT_KEY(roomId), systemMsg, MAX_CHAT_MESSAGES);
-        await this.redis.expire(ROOM_CHAT_KEY(roomId), CHAT_TTL);
-        this.server.to(roomId).emit('newMessage', systemMsg);
 
         this.logger.log(`User ${username} joined room ${roomId}`);
     }
@@ -433,21 +424,29 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
         const members = await this.getRoomMembers(roomId);
         this.server.to(roomId).emit('roomMembers', members);
-        this.server.to(roomId).emit('userLeft', username);
-        await this.notifyRoomsList(roomId);
 
-        // Gửi system message
-        const systemMsg: ChatMessage = {
-            id: `sys_${Date.now()}`,
-            roomId,
-            username: 'system',
-            message: `${username} đã rời phòng`,
-            type: 'status',
-            timestamp: Date.now(),
-        };
-        this.server.to(roomId).emit('newMessage', systemMsg);
+        // Kiểm tra xem thực sự đã thoát sạch mọi tab của phòng này chưa
+        const stillInRedis = members.some(m => m.username.toLowerCase() === username.toLowerCase());
+        const stillInMap = Array.from(this.socketRoomMap.values()).some(s => s.username.toLowerCase() === username.toLowerCase() && s.roomId === roomId);
 
-        this.logger.log(`User ${username} explicitly left room ${roomId}`);
+        if (!stillInRedis && !stillInMap) {
+            this.server.to(roomId).emit('userLeft', username);
+            await this.notifyRoomsList(roomId);
+
+            // Gửi system message
+            const systemMsg: ChatMessage = {
+                id: `sys_${Date.now()}`,
+                roomId,
+                username: 'system',
+                message: `${username} đã rời phòng`,
+                type: 'status',
+                timestamp: Date.now(),
+            };
+            this.server.to(roomId).emit('newMessage', systemMsg);
+            this.logger.log(`User ${username} has fully left room ${roomId}`);
+        } else {
+            this.logger.log(`User ${username} closed one tab of ${roomId}, but still has other active sessions.`);
+        }
     }
 
     // ─── Chat ───────────────────────────────────────────────────────────────
