@@ -27,17 +27,18 @@ import MoviesView, { AdminMovie } from './components/MoviesView';
 import MovieDetailView from './components/MovieDetailView';
 import RoomsView from './components/RoomsView';
 import ProfileModal from './components/ProfileModal';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getAdminStats } from '@/src/services/admin';
 
 const AdminDashboard = () => {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [selectedMovie, setSelectedMovie] = useState<AdminMovie | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   // Data States
-  const [movies, setMovies] = useState<AdminMovie[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [currentStreamUrl, setCurrentStreamUrl] = useState<string | null>(null);
   const [roomFilter, setRoomFilter] = useState('');
@@ -51,69 +52,14 @@ const AdminDashboard = () => {
 
   // --- Fetchers ---
 
-  const fetchMovies = useCallback(async (searchStr?: string) => {
-    setIsLoading(true);
-    try {
-      const data = await getVideosAdmin(1, 100, searchStr);
-      const videoList = data.videos || [];
-      const mappedMovies = videoList.map((v: any) => ({
-        id: v.id,
-        title: v.title,
-        uploader: v.owner?.username || 'Ẩn danh',
-        uploaderAvatar: v.owner?.avatarUrl || '',
-        duration: v.duration,
-        size: v.size || 0,
-        status: v.isActive ? 'Approved' : 'Pending',
-        thumbnailUrl: v.thumbnailUrl || '/placeholder-movie.jpg',
-        createdAt: new Date(v.createdAt).toLocaleString('vi-VN'),
-        description: v.description,
-        videoUrl: v.videoUrl,
-      }));
-      setMovies(mappedMovies);
-    } catch (error) {
-      toast.error('Không thể tải danh sách video');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const fetchUsers = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const data = await getAllUsers();
-      setUsers(data);
-    } catch (error) {
-      toast.error('Không thể tải danh sách người dùng');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const fetchRooms = useCallback(async (type?: string, searchStr?: string) => {
-    setIsLoading(true);
-    try {
-      const data = await getAllRooms(type, searchStr);
-      setRooms(data);
-    } catch (error) {
-      toast.error('Không thể tải danh sách phòng');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const { data: stats, isLoading: isStatsLoading } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: getAdminStats,
+    enabled: activeTab === 'dashboard',
+    staleTime: 60 * 1000, // Nhớ cache lại 1 phút cho mượt
+  });
 
   // Initial Load & Tab Change
-  useEffect(() => {
-    if (activeTab === 'dashboard') {
-      // Fetch everything for dashboard stats
-      Promise.all([fetchMovies(), fetchUsers(), fetchRooms()]);
-    } else if (activeTab === 'all_movies' || activeTab === 'movie_queue') {
-      fetchMovies(cleanSearch || undefined);
-    } else if (activeTab === 'users') {
-      // UsersView tự xử lý qua React Query nên không cần gọi ở đây nữa
-    } else if (activeTab === 'rooms') {
-      fetchRooms(roomFilter, cleanSearch || undefined);
-    }
-  }, [activeTab, roomFilter, cleanSearch, fetchMovies, fetchUsers, fetchRooms]);
 
   // Security Link Fetcher
   useEffect(() => {
@@ -132,7 +78,8 @@ const AdminDashboard = () => {
     try {
       await approveVideo(id);
       toast.success('Duyệt video thành công');
-      fetchMovies();
+      queryClient.invalidateQueries({ queryKey: ['admin-movies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       if (selectedMovie?.id === id) setSelectedMovie(null);
     } catch (error: any) {
       toast.error(error.message || 'Lỗi khi duyệt video');
@@ -144,7 +91,8 @@ const AdminDashboard = () => {
     try {
       await deleteVideo(id);
       toast.success('Xóa video thành công');
-      fetchMovies();
+      queryClient.invalidateQueries({ queryKey: ['admin-movies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
       if (selectedMovie?.id === id) setSelectedMovie(null);
     } catch (error: any) {
       toast.error(error.message || 'Lỗi khi xóa video');
@@ -155,7 +103,7 @@ const AdminDashboard = () => {
     try {
       await banUser(id, isBanned);
       toast.success(isBanned ? 'Đã khóa tài khoản' : 'Đã mở khóa tài khoản');
-      fetchUsers();
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     } catch (error: any) {
       toast.error(error.message || 'Lỗi khi xử lý người dùng');
     }
@@ -165,7 +113,7 @@ const AdminDashboard = () => {
     try {
       await switchRole(id);
       toast.success('Đã thay đổi vai trò thành công');
-      fetchUsers();
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
     } catch (error: any) {
       toast.error(error.message || 'Lỗi khi đổi vai trò');
     }
@@ -213,16 +161,20 @@ const AdminDashboard = () => {
 
   const getSearchPlaceholder = () => {
     switch (activeTab) {
-      case 'users': return 'Tìm username hoặc email...';
-      case 'rooms': return 'Tìm tên phòng chiếu...';
+      case 'users':
+        return 'Tìm username hoặc email...';
+      case 'rooms':
+        return 'Tìm tên phòng chiếu...';
       case 'all_movies':
-      case 'movie_queue': return 'Tìm tiêu đề video...';
-      default: return 'Tìm kiếm dữ liệu...';
+      case 'movie_queue':
+        return 'Tìm tiêu đề video...';
+      default:
+        return 'Tìm kiếm dữ liệu...';
     }
   };
 
   return (
-    <main className="min-h-screen bg-background font-sans text-white">
+    <main className="bg-background min-h-screen font-sans text-white">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={(tab) => {
@@ -270,10 +222,10 @@ const AdminDashboard = () => {
               exit={{ opacity: 0, y: -10 }}
             >
               {isLoading && (
-                <div className="flex flex-col items-center justify-center rounded-3xl bg-[#111113] border border-white/5 py-20 shadow-sm">
+                <div className="flex flex-col items-center justify-center rounded-3xl border border-white/5 bg-[#111113] py-20 shadow-sm">
                   <Loader2
                     size={40}
-                    className="mb-4 animate-spin text-primary"
+                    className="text-primary mb-4 animate-spin"
                   />
                   <p className="text-xs font-black tracking-widest text-gray-400 uppercase">
                     Đang tải dữ liệu hệ thống...
@@ -284,14 +236,14 @@ const AdminDashboard = () => {
                 <>
                   {activeTab === 'dashboard' && (
                     <DashboardView
-                      stats={{
-                        usersCount: users.length,
-                        roomsCount: rooms.length,
-                        moviesCount: movies.length,
-                        pendingCount: movies.filter(
-                          (m) => m.status === 'Pending'
-                        ).length,
-                      }}
+                      stats={
+                        stats || {
+                          usersCount: 0,
+                          roomsCount: 0,
+                          moviesCount: 0,
+                          pendingCount: 0,
+                        }
+                      }
                     />
                   )}
                   {activeTab === 'users' && (
