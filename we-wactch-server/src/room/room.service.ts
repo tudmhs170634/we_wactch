@@ -4,6 +4,7 @@ import {
     ForbiddenException,
     BadRequestException,
 } from '@nestjs/common';
+import { Subject } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { UploadService } from '../upload/upload.service';
@@ -29,7 +30,8 @@ const slugify = (title: string): string => {
     return `${base}-${suffix}`;
 };
 
-const ROOM_LIST_KEY = (page: number, limit: number, type?: string) => `rooms:list:${page}:${limit}:${type || 'all'}`;
+const ROOM_LIST_KEY = (page: number, limit: number, type?: string, onlyActive?: boolean, hostId?: string) => 
+    `rooms:list:${page}:${limit}:${type || 'all'}:${onlyActive || 'false'}:${hostId || 'any'}`;
 const ROOM_KEY = (id: string) => `rooms:item:${id}`;
 const ROOM_SLUG_KEY = (slug: string) => `rooms:slug:${slug}`;
 const TTL = 60;
@@ -41,6 +43,8 @@ export class RoomService {
         private readonly redis: RedisService,
         private readonly uploadService: UploadService,
     ) {}
+
+    public readonly roomListUpdated$ = new Subject<void>();
 
     async create(userId: string, dto: CreateRoomDto, imageFile?: Express.Multer.File) {
         if (dto.type === 'private' && !dto.password) {
@@ -76,13 +80,17 @@ export class RoomService {
             },
         });
 
-        // Xóa cache list
-        await this.redis.del(ROOM_LIST_KEY(1, 10), ROOM_LIST_KEY(1, 20), ROOM_LIST_KEY(1, 100));
+        const keys = await this.redis.keys('rooms:list:*');
+        if (keys.length > 0) {
+            await Promise.all(keys.map(k => this.redis.del(k)));
+        }
+        
+        this.roomListUpdated$.next();
         return room;
     }
 
-    async findAll(page = 1, limit = 10, type?: string, onlyActive = false) {
-        const cacheKey = ROOM_LIST_KEY(page, limit, type);
+    async findAll(page = 1, limit = 10, type?: string, onlyActive = false, hostId?: string) {
+        const cacheKey = ROOM_LIST_KEY(page, limit, type, onlyActive, hostId);
         const cached = await this.redis.get(cacheKey);
         if (cached) return cached;
 
@@ -95,6 +103,7 @@ export class RoomService {
             }
             where.type = type as RoomType;
         }
+        if (hostId) where.hostId = hostId;
 
         const [rooms, total] = await Promise.all([
             this.prisma.room.findMany({
@@ -110,7 +119,26 @@ export class RoomService {
             this.prisma.room.count({ where }),
         ]);
 
-        const result = { rooms, total, page, limit };
+        // Inject current user count from Redis (Unique usernames)
+        const roomsWithCount = await Promise.all(
+            rooms.map(async (room) => {
+                const keys = await this.redis.keys(`room:${room.id}:members:*`);
+                const usernames = new Set<string>();
+                
+                // Lấy tất cả thông tin thành viên song song để tối ưu hiệu năng
+                const membersData = await Promise.all(
+                    keys.map(key => this.redis.get<{ username: string }>(key))
+                );
+                
+                membersData.forEach(m => {
+                    if (m?.username) usernames.add(m.username);
+                });
+                
+                return { ...room, currentUsers: usernames.size };
+            }),
+        );
+
+        const result = { rooms: roomsWithCount, total, page, limit };
         await this.redis.set(cacheKey, result, TTL);
         return result;
     }
@@ -176,9 +204,12 @@ export class RoomService {
         await this.redis.del(
             ROOM_KEY(id),
             ROOM_SLUG_KEY(room.slug),
-            ROOM_LIST_KEY(1, 10),
-            ROOM_LIST_KEY(1, 20),
         );
+        const keys = await this.redis.keys('rooms:list:*');
+        if (keys.length > 0) {
+            await Promise.all(keys.map(k => this.redis.del(k)));
+        }
+        this.roomListUpdated$.next();
         return updated;
     }
 
@@ -190,9 +221,12 @@ export class RoomService {
         await this.redis.del(
             ROOM_KEY(id),
             ROOM_SLUG_KEY(room.slug),
-            ROOM_LIST_KEY(1, 10),
-            ROOM_LIST_KEY(1, 20),
         );
+        const keys = await this.redis.keys('rooms:list:*');
+        if (keys.length > 0) {
+            await Promise.all(keys.map(k => this.redis.del(k)));
+        }
+        this.roomListUpdated$.next();
         return { message: 'Room deleted' };
     }
 

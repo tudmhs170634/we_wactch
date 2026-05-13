@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PROTECTED_ROUTES = ['/rooms', '/profile', '/videos'];
+const PROTECTED_ROUTES = ['/rooms', '/profile', '/videos', '/private', '/community'];
 
 const AUTH_ROUTES = ['/login', '/register'];
 

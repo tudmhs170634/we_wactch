@@ -42,6 +42,48 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
+  /** Push một item vào đầu list (newest-first). Tự trim xuống maxLen items */
+  async lpush(key: string, value: unknown, maxLen = 100): Promise<void> {
+    try {
+      const serialized = JSON.stringify(value);
+      const pipeline = this.client.pipeline();
+      pipeline.lpush(key, serialized);
+      pipeline.ltrim(key, 0, maxLen - 1);
+      await pipeline.exec();
+    } catch (err: any) {
+      this.logger.warn(`Redis lpush failed: ${err.message}`);
+    }
+  }
+
+  /** Lấy các item trong list (index 0 = mới nhất) */
+  async lrange<T>(key: string, start = 0, stop = -1): Promise<T[]> {
+    try {
+      const items = await this.client.lrange(key, start, stop);
+      return items.map((i) => JSON.parse(i) as T).reverse(); // reverse -> oldest-first
+    } catch {
+      return [];
+    }
+  }
+
+  /** Đặt TTL cho key */
+  async expire(key: string, seconds: number): Promise<void> {
+    try {
+      await this.client.expire(key, seconds);
+    } catch (err: any) {
+      this.logger.warn(`Redis expire failed: ${err.message}`);
+    }
+  }
+
+  /** Tìm các key theo pattern */
+  async keys(pattern: string): Promise<string[]> {
+    try {
+      return await this.client.keys(pattern);
+    } catch (err: any) {
+      this.logger.warn(`Redis keys failed: ${err.message}`);
+      return [];
+    }
+  }
+
   onModuleDestroy() {
     this.client.disconnect();
   }

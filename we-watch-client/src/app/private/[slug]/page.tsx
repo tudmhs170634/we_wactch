@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, use } from 'react';
-import { MOCK_VIDEOS, MOCK_FILMS } from '@/src/constants/mockData';
+import { MOCK_VIDEOS } from '@/src/constants/mockData';
 import Image from 'next/image';
 import {
   Play,
@@ -31,9 +31,13 @@ import {
   VideoOff,
   Loader2,
   Search,
+  Heart,
+  ThumbsUp,
+  Flame,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getRoom, getRoomBySlug } from '@/src/services/room';
 import { getVideos } from '@/src/services/video';
 import { toast } from 'sonner';
@@ -43,124 +47,59 @@ import LiveKitRoom from '@/src/components/rooms/LiveKitRoom';
 import api from '@/src/lib/axios';
 import VideoPlayer from '@/src/components/videos/VideoPlayer';
 
-const MOCK_MEMBERS = [
-  {
-    id: 1,
-    name: 'trungne',
-    role: 'host',
-    avatar:
-      'https://scontent.fhan2-3.fna.fbcdn.net/v/t39.30808-6/475181263_1169410031565475_7208810035280146740_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=7b2446&_nc_eui2=AeGghEgzthmpLdAbI3DtlAVGMK3gCKxL64IwreAIrEvrgmJWaW26DaJNbc0RpWi7LzdFOlgWRsPNLDfsqfnD2LYs&_nc_ohc=5JyaQmWL-BQQ7kNvwEixxEe&_nc_oc=AdovOt-8DJrAV25RKj9zJTXodiFBW7tA9wz1zVoazWE1dFpuCYgoeY36KHC1yp3FrJg&_nc_zt=23&_nc_ht=scontent.fhan2-3.fna&_nc_gid=HQ7JvPqoGMHnF850t3DL_Q&_nc_ss=7b2a8&oh=00_Af4oQbLZrET-lmo1dMrfgmtUytYbDIe5H6CVkhB5IeumUA&oe=6A01DD16',
-    micOn: true,
-    camOn: true,
-  },
-  {
-    id: 2,
-    name: 'ronalĐộ',
-    role: 'viewer',
-    avatar:
-      'https://scontent.fhan20-1.fna.fbcdn.net/v/t51.82787-15/683765285_18728236822056421_8719514952349244206_n.jpg?stp=dst-jpg_s590x590_tt6&_nc_cat=1&ccb=1-7&_nc_sid=13d280&_nc_eui2=AeF5PicVqkdxpDjpXVdx57VBxklhi_0k1EXGSWGL_STURduPGmkV1VwG9F4ptQKFNvqX315jERKq0JCr10IKa7E-&_nc_ohc=IlY_ZS9ZUA0Q7kNvwGO3OtO&_nc_oc=Adr9pMxnYCA3Q3h_WmKpWaH1-UAMNJ_H19wiQpLPo-4TUFvjlvm6EImg0ZYyRblE5PM&_nc_zt=23&_nc_ht=scontent.fhan20-1.fna&_nc_gid=wCEx13oTMFSxGnvKU_Ydaw&_nc_ss=7b2a8&oh=00_Af5f1nABeQR_0l6BExkphy7lItb968zyiNFf6Snki2xY5A&oe=6A01E9D8',
-    micOn: false,
-    camOn: true,
-  },
-  {
-    id: 3,
-    name: 'Mét xi',
-    role: 'viewer',
-    avatar:
-      'https://scontent.fhan2-3.fna.fbcdn.net/v/t1.6435-9/199280580_345469096944687_1072097131842973013_n.jpg?stp=dst-jpg_s960x960_tt6&_nc_cat=108&ccb=1-7&_nc_sid=2a1932&_nc_eui2=AeEzzuvBgrfekVx9kugdK2Tead0yf_Ns_zJp3TJ_82z_Mq-aSc0jSm4NjPhExISkDIKHSG_sRGRrK-JnwNKXA9mo&_nc_ohc=6AJQwAGT9TsQ7kNvwFe7z9k&_nc_oc=AdoYOiA2vDxe6-tJOURRD6c8sGx2JWl40bREJ6LhA3HPgnTz-7LhbtWEtwV9wF-Wi5s&_nc_zt=23&_nc_ht=scontent.fhan2-3.fna&_nc_gid=a4yR3DpIJ0OKdbIDZ2M4Qg&_nc_ss=7b2a8&oh=00_Af6LL8c6kHsAHwqmdT-R45XpjVtOtrsrIIpORNrAMGn-5g&oe=6A2395AA',
-    micOn: true,
-    camOn: false,
-  },
-  {
-    id: 4,
-    name: 'An thuyên',
-    role: 'viewer',
-    avatar:
-      'https://scontent.fhan2-5.fna.fbcdn.net/v/t39.30808-6/683812266_1434973675330294_8264366892032648574_n.jpg?_nc_cat=104&ccb=1-7&_nc_sid=13d280&_nc_eui2=AeEryUK5MPsI8Wi3K-oLBkhMm-bB3mPK1eib5sHeY8rV6Fwv5FRPhwvMS4NivGFneDGwj8_O_wh7XMWmzYkfMNYy&_nc_ohc=7mgyCUK6i8EQ7kNvwFY0W6k&_nc_oc=AdrhH47-iDBRlRFHngyNxVRi6WdxTMb_hUNaHs6xykY79WmLaF3PHu5HcmLuXSj_qYk&_nc_zt=23&_nc_ht=scontent.fhan2-5.fna&_nc_gid=mT85Lx29LgmCUIPRycE0fQ&_nc_ss=7b2a8&oh=00_Af7yxGFUoETj08xRfA2bc6a9q6eG81uDqSSKPskH45YTNg&oe=6A01D9F7',
-    micOn: false,
-    camOn: true,
-  },
-  {
-    id: 5,
-    name: 'An ',
-    role: 'viewer',
-    avatar:
-      'https://scontent.fhan2-5.fna.fbcdn.net/v/t39.30808-6/683812266_1434973675330294_8264366892032648574_n.jpg?_nc_cat=104&ccb=1-7&_nc_sid=13d280&_nc_eui2=AeEryUK5MPsI8Wi3K-oLBkhMm-bB3mPK1eib5sHeY8rV6Fwv5FRPhwvMS4NivGFneDGwj8_O_wh7XMWmzYkfMNYy&_nc_ohc=7mgyCUK6i8EQ7kNvwFY0W6k&_nc_oc=AdrhH47-iDBRlRFHngyNxVRi6WdxTMb_hUNaHs6xykY79WmLaF3PHu5HcmLuXSj_qYk&_nc_zt=23&_nc_ht=scontent.fhan2-5.fna&_nc_gid=mT85Lx29LgmCUIPRycE0fQ&_nc_ss=7b2a8&oh=00_Af7yxGFUoETj08xRfA2bc6a9q6eG81uDqSSKPskH45YTNg&oe=6A01D9F7',
-    micOn: false,
-    camOn: true,
-  },
-  {
-    id: 6,
-    name: ' thuyên',
-    role: 'viewer',
-    avatar:
-      'https://scontent.fhan2-5.fna.fbcdn.net/v/t39.30808-6/683812266_1434973675330294_8264366892032648574_n.jpg?_nc_cat=104&ccb=1-7&_nc_sid=13d280&_nc_eui2=AeEryUK5MPsI8Wi3K-oLBkhMm-bB3mPK1eib5sHeY8rV6Fwv5FRPhwvMS4NivGFneDGwj8_O_wh7XMWmzYkfMNYy&_nc_ohc=7mgyCUK6i8EQ7kNvwFY0W6k&_nc_oc=AdrhH47-iDBRlRFHngyNxVRi6WdxTMb_hUNaHs6xykY79WmLaF3PHu5HcmLuXSj_qYk&_nc_zt=23&_nc_ht=scontent.fhan2-5.fna&_nc_gid=mT85Lx29LgmCUIPRycE0fQ&_nc_ss=7b2a8&oh=00_Af7yxGFUoETj08xRfA2bc6a9q6eG81uDqSSKPskH45YTNg&oe=6A01D9F7',
-    micOn: false,
-    camOn: true,
-  },
-  {
-    id: 7,
-    name: 'Anbc',
-    role: 'viewer',
-    avatar:
-      'https://scontent.fhan2-5.fna.fbcdn.net/v/t39.30808-6/683812266_1434973675330294_8264366892032648574_n.jpg?_nc_cat=104&ccb=1-7&_nc_sid=13d280&_nc_eui2=AeEryUK5MPsI8Wi3K-oLBkhMm-bB3mPK1eib5sHeY8rV6Fwv5FRPhwvMS4NivGFneDGwj8_O_wh7XMWmzYkfMNYy&_nc_ohc=7mgyCUK6i8EQ7kNvwFY0W6k&_nc_oc=AdrhH47-iDBRlRFHngyNxVRi6WdxTMb_hUNaHs6xykY79WmLaF3PHu5HcmLuXSj_qYk&_nc_zt=23&_nc_ht=scontent.fhan2-5.fna&_nc_gid=mT85Lx29LgmCUIPRycE0fQ&_nc_ss=7b2a8&oh=00_Af7yxGFUoETj08xRfA2bc6a9q6eG81uDqSSKPskH45YTNg&oe=6A01D9F7',
-    micOn: false,
-    camOn: true,
-  },
-  {
-    id: 8,
-    name: 'cccc',
-    role: 'viewer',
-    avatar:
-      'https://scontent.fhan2-5.fna.fbcdn.net/v/t39.30808-6/683812266_1434973675330294_8264366892032648574_n.jpg?_nc_cat=104&ccb=1-7&_nc_sid=13d280&_nc_eui2=AeEryUK5MPsI8Wi3K-oLBkhMm-bB3mPK1eib5sHeY8rV6Fwv5FRPhwvMS4NivGFneDGwj8_O_wh7XMWmzYkfMNYy&_nc_ohc=7mgyCUK6i8EQ7kNvwFY0W6k&_nc_oc=AdrhH47-iDBRlRFHngyNxVRi6WdxTMb_hUNaHs6xykY79WmLaF3PHu5HcmLuXSj_qYk&_nc_zt=23&_nc_ht=scontent.fhan2-5.fna&_nc_gid=mT85Lx29LgmCUIPRycE0fQ&_nc_ss=7b2a8&oh=00_Af7yxGFUoETj08xRfA2bc6a9q6eG81uDqSSKPskH45YTNg&oe=6A01D9F7',
-    micOn: false,
-    camOn: true,
-  },
-];
-
-const MOCK_CHAT = [
-  {
-    id: 1,
-    user: 'trungne',
-    avatar: 'https://i.pravatar.cc/150?u=1',
-    message: 'Mọi người vào đủ chưa nhỉ?',
-    type: 'msg',
-  },
-  {
-    id: 2,
-    user: 'AnhKhoa',
-    avatar: 'https://i.pravatar.cc/150?u=2',
-    message: 'Tới luôn đi host',
-    type: 'msg',
-  },
-  {
-    id: 3,
-    user: 'system',
-    avatar: '',
-    message: 'Trung đang tua video...',
-    type: 'status',
-  },
-];
-
 export default function WeWatchRoomPage({
   params: paramsPromise,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const params = use(paramsPromise);
+  const router = useRouter();
+  const { user, isAuthenticated } = useAuthStore();
   const [isPlaying, setIsPlaying] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncDone, setSyncDone] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState(MOCK_CHAT);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
+  const [visibleStatusIds, setVisibleStatusIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
-  const { user } = useAuthStore();
   const [room, setRoom] = useState<any>(null);
+  const [password, setPassword] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    // Lấy mật khẩu đã nhập từ sessionStorage (nếu có)
+    const savedPassword = sessionStorage.getItem(`room_pwd_${params.slug}`);
+    if (savedPassword) setPassword(savedPassword);
+  }, [params.slug]);
+  const {
+    members: socketMembers,
+    messages,
+    emojis,
+    wishlist: socketWishlist,
+    wishlistError,
+    sendMessage,
+    sendEmoji,
+    addVideoToWishlist,
+    removeVideoFromWishlist,
+    socketError,
+    currentHostId,
+    setCurrentHostId,
+  } = useSocket(room?.id, user, password);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isHost, setIsHost] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
+  const [isFilmsOpen, setIsFilmsOpen] = useState(true);
+  const [isQueueOpen, setIsQueueOpen] = useState(true);
+  const [liveKitToken, setLiveKitToken] = useState<string>('');
 
   // Real DB Library State
   const [libraryFilms, setLibraryFilms] = useState<any[]>([]);
@@ -169,7 +108,35 @@ export default function WeWatchRoomPage({
   const [hasMoreLib, setHasMoreLib] = useState(true);
   const [isLoadingLib, setIsLoadingLib] = useState(false);
 
-  const fetchLibraryData = async (page: number, search: string, isNewSearch = false) => {
+  // Wishlist error toast
+  useEffect(() => {
+    if (wishlistError) toast.error(wishlistError);
+  }, [wishlistError]);
+
+  // Handle Socket errors (e.g. Join Room blocked)
+  useEffect(() => {
+    if (socketError) {
+      toast.error(socketError, { id: 'socket-error' });
+      router.push('/rooms');
+    }
+  }, [socketError, router]);
+
+  // Security Guard: Check if user came from the rooms list join flow
+  useEffect(() => {
+    const authFlag = sessionStorage.getItem(`ww_auth_${params.slug}`);
+    if (!authFlag) {
+      // Nếu không có flag và không phải host/admin thì chặn (sẽ check kỹ hơn khi room load xong)
+      setIsAuthorized(false);
+    } else {
+      setIsAuthorized(true);
+    }
+  }, [params.slug]);
+
+  const fetchLibraryData = async (
+    page: number,
+    search: string,
+    isNewSearch = false
+  ) => {
     if (isLoadingLib) return;
     setIsLoadingLib(true);
     try {
@@ -208,22 +175,6 @@ export default function WeWatchRoomPage({
       fetchLibraryData(nextPage, searchQuery);
     }
   };
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isMyMicOn, setIsMyMicOn] = useState(true);
-  const [isMyCamOn, setIsMyCamOn] = useState(true);
-
-  const [currentFilmId, setCurrentFilmId] = useState<any>(null);
-  const [requestedVideos, setRequestedVideos] = useState(
-    MOCK_VIDEOS.slice(0, 3)
-  );
-
-  const [memberOffset, setMemberOffset] = useState(0);
-  const [liveKitToken, setLiveKitToken] = useState<string>('');
-
-  const chatScrollRef = useRef<HTMLDivElement>(null);
-
-  const { members: socketMembers } = useSocket(room?.id, user);
-
   useEffect(() => {
     const fetchRoom = async () => {
       if (!params.slug) return;
@@ -256,20 +207,52 @@ export default function WeWatchRoomPage({
     fetchRoom();
   }, [params.slug]);
 
-  // Determine host state
+  // Determine host
   useEffect(() => {
     if (room && user) {
+      // Ưu tiên host từ socket (real-time), nếu chưa có thì dùng từ room data (initial)
+      const effectiveHostId = currentHostId || room.hostId || room.host?.id;
       const isRoomHost =
-        room.hostId === user.username || room.host?.username === user.username;
+        effectiveHostId === user.id || room.host?.username === user.username;
       setIsHost(isRoomHost);
+
+      // Sync initial hostId to socket state
+      if (!currentHostId && (room.hostId || room.host?.id)) {
+        setCurrentHostId(room.hostId || room.host?.id);
+      }
+
+      // Final security check once room/user is loaded
+      const isAdmin = user.role === 'admin';
+      const authFlag = sessionStorage.getItem(`ww_auth_${params.slug}`);
+
+      if (!isRoomHost && !isAdmin && !authFlag) {
+        toast.error('Bạn chỉ có thể tham gia phòng từ danh sách phòng chiếu.');
+        router.push('/rooms');
+      }
     }
-  }, [room, user]);
+  }, [room, user, currentHostId, setCurrentHostId, params.slug, router]);
+
+  // Handle disappearing status messages in Chat tab
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.type === 'status') {
+      setVisibleStatusIds((prev) => new Set(prev).add(lastMsg.id));
+      const timer = setTimeout(() => {
+        setVisibleStatusIds((prev) => {
+          const next = new Set(prev);
+          next.delete(lastMsg.id);
+          return next;
+        });
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [messages]);
 
   useEffect(() => {
     if (room) {
       console.log('Room loaded in UI:', room);
       console.log('Video URL:', room.video?.videoUrl);
-      
+
       // Fetch LiveKit Token
       const fetchLKToken = async () => {
         try {
@@ -283,17 +266,11 @@ export default function WeWatchRoomPage({
     }
   }, [room]);
 
-  const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
-  const [isFilmsOpen, setIsFilmsOpen] = useState(true);
-  const [isQueueOpen, setIsQueueOpen] = useState(true);
-
-
-
   useEffect(() => {
     if (chatScrollRef.current) {
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, activeTab]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -313,50 +290,20 @@ export default function WeWatchRoomPage({
     }, 1000);
   };
 
-  const handleCopyLink = () => {
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
-
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        user: 'Me',
-        avatar: 'https://i.pravatar.cc/150?u=99',
-        message: chatInput,
-        type: 'msg',
-      },
-    ]);
+    sendMessage(chatInput);
     setChatInput('');
   };
 
-  const handleAddToRequest = (filmId: number) => {
-    const film = MOCK_VIDEOS.find((v) => v.id === filmId);
-    if (film) {
-      setRequestedVideos((prev) => [...prev, { ...film, id: Date.now() }]); // Add with unique id for the list
-    }
-  };
-
-  const handleNextMembers = () => {
-    const otherMembers = MOCK_MEMBERS.filter((m) => m.id !== 1);
-    const total = otherMembers.length;
-    if (total <= 3) return;
-
-    let newOffset = memberOffset + 3;
-    if (newOffset + 3 > total) {
-      newOffset = total - 3;
-    }
-    setMemberOffset(newOffset);
-  };
-
-  const handlePrevMembers = () => {
-    let newOffset = memberOffset - 3;
-    if (newOffset < 0) newOffset = 0;
-    setMemberOffset(newOffset);
+  const handleAddToRequest = (film: any) => {
+    addVideoToWishlist({
+      id: film.id,
+      title: film.title,
+      thumbnailUrl: film.thumbnailUrl,
+      duration: film.duration,
+    });
   };
 
   const handleKick = (name: string) => {
@@ -389,31 +336,17 @@ export default function WeWatchRoomPage({
           {room?.type === 'private' && room?.password && (
             <div className="flex items-center gap-2 rounded-lg border border-dashed border-[#C800DF]/50 bg-[#C800DF]/10 px-3 py-1.5">
               <span className="font-mono text-xs font-black text-[#C800DF]">
-                PWD: {room.password}
+                Mật khẩu: {room.password}
               </span>
             </div>
           )}
-          <button
-            onClick={() => setIsHost(!isHost)}
-            className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold transition-all ${isHost ? 'bg-[#C800DF]/20 text-[#C800DF]' : 'bg-white/5 text-white/60'}`}
-          >
-            {isHost ? 'View as Host' : 'View as Viewer'}
-          </button>
 
           <button
-            onClick={handleCopyLink}
-            className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/10"
+            onClick={() => setIsLeaveModalOpen(true)}
+            className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30"
           >
-            {isCopied ? (
-              <Check size={14} className="text-green-400" />
-            ) : (
-              <Copy size={14} />
-            )}
-            {isCopied ? 'Đã sao chép' : 'Copy Link'}
-          </button>
-          <button className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30">
             <LogOut size={14} />
-            {isHost ? 'Kết thúc phòng' : 'Rời phòng'}
+            {isHost ? 'Rời phòng' : 'Rời phòng'}
           </button>
         </div>
       </div>
@@ -438,7 +371,7 @@ export default function WeWatchRoomPage({
                 <ChevronDown size={16} />
               )}
             </div>
-            
+
             <AnimatePresence initial={false}>
               {isFilmsOpen && (
                 <motion.div
@@ -450,22 +383,28 @@ export default function WeWatchRoomPage({
                   {/* Search Bar */}
                   <div className="px-4 pt-4 pb-2">
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
-                      <input 
-                        type="text" 
+                      <Search
+                        className="absolute top-1/2 left-3 -translate-y-1/2 text-white/20"
+                        size={14}
+                      />
+                      <input
+                        type="text"
                         placeholder="Tìm phim..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full rounded-xl border border-white/5 bg-white/5 py-2 pl-9 pr-4 text-[11px] text-white placeholder-white/20 outline-none focus:border-[#C800DF]/50"
+                        className="w-full rounded-xl border border-white/5 bg-white/5 py-2 pr-4 pl-9 text-[11px] text-white placeholder-white/20 outline-none focus:border-[#C800DF]/50"
                       />
                     </div>
                   </div>
 
-                  <div 
+                  <div
                     className="scrollbar-hide flex flex-1 flex-col gap-3 overflow-y-auto p-4"
                     onScroll={(e) => {
                       const target = e.currentTarget;
-                      if (target.scrollHeight - Math.ceil(target.scrollTop) <= target.clientHeight + 10) {
+                      if (
+                        target.scrollHeight - Math.ceil(target.scrollTop) <=
+                        target.clientHeight + 10
+                      ) {
                         handleLoadMore();
                       }
                     }}
@@ -477,7 +416,9 @@ export default function WeWatchRoomPage({
                       >
                         <div className="relative h-12 w-20 flex-shrink-0 overflow-hidden rounded-lg">
                           <Image
-                            src={film.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
+                            src={
+                              film.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl
+                            }
                             alt={film.title}
                             fill
                             unoptimized
@@ -489,18 +430,20 @@ export default function WeWatchRoomPage({
                             {film.title}
                           </span>
                           <span className="text-[10px] text-white/40">
-                             {film.duration ? Math.floor(film.duration / 60) + ' phút' : '--'}
+                            {film.duration
+                              ? Math.floor(film.duration / 60) + ' phút'
+                              : '--'}
                           </span>
                         </div>
                         <button
-                          onClick={() => handleAddToRequest(film.id)}
+                          onClick={() => handleAddToRequest(film)}
                           className="text-[#C800DF] opacity-0 transition-opacity group-hover:opacity-100"
                         >
                           <Plus size={14} />
                         </button>
                       </div>
                     ))}
-                    
+
                     {isLoadingLib && (
                       <div className="flex justify-center py-4">
                         <Loader2 className="h-5 w-5 animate-spin text-[#C800DF]" />
@@ -527,7 +470,7 @@ export default function WeWatchRoomPage({
               onClick={() => setIsQueueOpen(!isQueueOpen)}
             >
               <h3 className="text-sm font-bold tracking-wider text-white uppercase">
-                Video đang xem
+                Video đang chờ
               </h3>
               {isQueueOpen ? (
                 <ChevronUp size={16} />
@@ -577,50 +520,55 @@ export default function WeWatchRoomPage({
 
                   <div className="my-1 h-px w-full bg-white/5"></div>
                   <div className="pl-1 text-[10px] font-black tracking-widest text-white/20 uppercase">
-                    Danh sách chờ
+                    Danh sách chờ ({socketWishlist.length})
                   </div>
 
-                  {requestedVideos.map((vid) => (
+                  {socketWishlist.map((vid) => (
                     <div
                       key={vid.id}
-                      className={`group relative flex cursor-pointer flex-col gap-2 rounded-xl p-2 transition-all ${
-                        currentFilmId === vid.id
-                          ? 'bg-[#C800DF]/10 ring-1 ring-[#C800DF]/50'
-                          : 'hover:bg-white/5'
-                      }`}
+                      className="group relative flex cursor-pointer flex-col gap-2 rounded-xl p-2 transition-all hover:bg-white/5"
                     >
                       <div className="relative h-20 w-full overflow-hidden rounded-lg">
                         <Image
-                          src={vid.thumbnailUrl}
+                          src={vid.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
                           alt={vid.title}
                           fill
                           unoptimized
                           className="object-cover"
                         />
                         <div className="absolute right-1 bottom-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
-                          {vid.duration}
+                          {vid.duration
+                            ? Math.floor(vid.duration / 60) + 'm'
+                            : '--'}
                         </div>
-
-                        {/* Host Play Button Overlay */}
                         {isHost && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCurrentFilmId(vid.id);
-                              }}
-                              className="rounded-full bg-[#C800DF] p-2 text-white shadow-lg transition-transform hover:scale-110 active:scale-95"
-                            >
-                              <Play size={16} fill="currentColor" />
-                            </button>
-                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeVideoFromWishlist(vid.id);
+                            }}
+                            className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500/80 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          >
+                            <X size={10} />
+                          </button>
                         )}
                       </div>
-                      <span className="line-clamp-1 text-xs font-bold text-white">
-                        {vid.title}
-                      </span>
+                      <div>
+                        <span className="line-clamp-1 text-xs font-bold text-white">
+                          {vid.title}
+                        </span>
+                        <span className="text-[10px] text-white/30">
+                          bởi {vid.addedBy}
+                        </span>
+                      </div>
                     </div>
                   ))}
+
+                  {socketWishlist.length === 0 && (
+                    <div className="py-6 text-center text-[11px] font-bold text-white/20 italic">
+                      Chưa có video nào trong hàng chờ
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -695,7 +643,7 @@ export default function WeWatchRoomPage({
 
           {/* Member Cameras Section (LiveKit) */}
           <div className="relative flex h-36 w-full flex-shrink-0 items-center gap-3 px-4">
-            <LiveKitRoom 
+            <LiveKitRoom
               roomName={room?.id || params.slug}
               token={liveKitToken}
               onDisconnect={() => setLiveKitToken('')}
@@ -704,7 +652,7 @@ export default function WeWatchRoomPage({
         </div>
 
         {/* RIGHT SIDEBAR: Participants & Chat */}
-        <div className="glass flex w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
+        <div className="glass relative flex w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
           {/* Participants Header (Collapsible) */}
           <div
             className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 transition-colors hover:bg-white/5"
@@ -736,106 +684,208 @@ export default function WeWatchRoomPage({
                 exit={{ height: 0, opacity: 0 }}
                 className="flex flex-col overflow-hidden border-b border-white/5"
               >
-                <div className="scrollbar-hide flex flex-1 flex-col gap-3 overflow-y-auto p-4">
-                  {socketMembers.map((m, idx) => (
-                    <div
-                      key={m.username || idx}
-                      className="group flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-white/10">
-                          {m.avatarUrl ? (
-                            <Image
-                              src={m.avatarUrl}
-                              alt={m.username}
-                              fill
-                              unoptimized
-                              className="object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-white/10">
-                              <Users size={12} className="text-white/40" />
+                {!room ? (
+                  <div className="flex flex-col items-center justify-center py-10 opacity-40">
+                    <Loader2
+                      className="animate-spin text-[#C800DF]"
+                      size={20}
+                    />
+                    <span className="mt-2 text-[10px] font-black tracking-widest uppercase">
+                      Đang tải...
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="scrollbar-hide flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+                      {socketMembers.map((m, idx) => (
+                        <div
+                          key={m.username || idx}
+                          className="group flex items-center justify-between"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-white/10">
+                              {m.avatarUrl ? (
+                                <Image
+                                  src={m.avatarUrl}
+                                  alt={m.username}
+                                  fill
+                                  unoptimized
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-white/10">
+                                  <Users size={12} className="text-white/40" />
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        <span className="text-sm font-bold text-white">
-                          {m.username}
-                          {m.username === user?.username && ' (Bạn)'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {m.username === room?.host?.username ? (
-                          <span className="rounded-full border border-[#C800DF] px-2 py-0.5 text-[10px] font-bold text-[#C800DF]">
-                            Chủ phòng
-                          </span>
-                        ) : (
-                          isHost && (
+                            <span className="text-sm font-medium text-white/80">
+                              {m.username}
+                              {m.username === user?.username && ' (Bạn)'}
+                            </span>
+                          </div>
+                          {isHost && m.username !== room?.host?.username && (
                             <button
                               onClick={() => handleKick(m.username)}
-                              className="text-red-500 opacity-0 transition-opacity group-hover:opacity-100 hover:scale-110"
+                              className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125"
                             >
                               <UserMinus size={14} />
                             </button>
-                          )
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      ))}
+                      {socketMembers.length === 0 && (
+                        <div className="py-4 text-center text-[11px] text-white/20 italic">
+                          Chưa có ai trong phòng
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Chat Section */}
+          {/* Chat Header with Tabs */}
           <div className="flex items-center justify-between border-b border-white/5 p-4">
-            <span className="text-sm font-bold tracking-tighter text-white uppercase">
-              Trò chuyện
-            </span>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`text-sm font-bold tracking-tighter uppercase transition-colors ${
+                  activeTab === 'chat' ? 'text-white' : 'text-white/20'
+                }`}
+              >
+                Trò chuyện
+              </button>
+              <div className="h-4 w-px bg-white/10"></div>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`text-sm font-bold tracking-tighter uppercase transition-colors ${
+                  activeTab === 'history' ? 'text-white' : 'text-white/20'
+                }`}
+              >
+                Lịch sử
+              </button>
+            </div>
             <div className="flex gap-3 text-white/40">
               <Volume2 size={16} className="cursor-pointer hover:text-white" />
               <Maximize size={16} className="cursor-pointer hover:text-white" />
             </div>
           </div>
 
-          <div
-            ref={chatScrollRef}
-            className="scrollbar-hide flex-1 space-y-4 overflow-y-auto p-4"
-          >
-            {messages.map((msg) => (
-              <React.Fragment key={msg.id}>
-                {msg.type === 'status' ? (
-                  <div className="flex w-full justify-center py-2">
-                    <span className="text-[13px] font-medium text-white/30 italic">
-                      {msg.message}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3">
-                    <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-full border border-white/10 shadow-lg">
-                      <Image
-                        src={msg.avatar}
-                        alt={msg.user}
-                        fill
-                        unoptimized
-                        className="object-cover"
-                      />
-                    </div>
-                    <div className="flex flex-col items-start">
-                      <span className="text-[13px] font-black text-[#C800DF]">
-                        {msg.user}
-                      </span>
-                      <p className="mt-1 rounded-[18px] rounded-tl-none bg-white/5 px-4 py-2.5 text-[14px] leading-relaxed text-white/90 shadow-sm">
-                        {msg.message}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </React.Fragment>
-            ))}
+          {/* Floating Emojis Layer */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <AnimatePresence>
+              {emojis.map((e) => (
+                <motion.div
+                  key={e.localId}
+                  initial={{ opacity: 1, y: 80, x: `${e.x}%`, scale: 0.5 }}
+                  animate={{ opacity: 0, y: -100, x: `${e.x}%`, scale: 1.8 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 4.5, ease: 'easeOut' }}
+                  className="absolute bottom-16 text-2xl"
+                >
+                  {e.emoji}
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
+
+          {!room ? (
+            <div className="flex flex-1 flex-col items-center justify-center opacity-40">
+              <Loader2 className="animate-spin text-[#C800DF]" size={24} />
+              <span className="mt-3 text-xs font-black tracking-widest uppercase">
+                Đang tải cuộc trò chuyện...
+              </span>
+            </div>
+          ) : (
+            <div
+              ref={chatScrollRef}
+              className="scrollbar-hide flex-1 space-y-4 overflow-y-auto p-4"
+            >
+              {messages
+                .filter((msg) =>
+                  activeTab === 'history'
+                    ? msg.type === 'status'
+                    : msg.type === 'msg' || visibleStatusIds.has(msg.id)
+                )
+                .map((msg) => (
+                  <React.Fragment key={msg.id}>
+                    {msg.type === 'status' ? (
+                      <div className="flex w-full justify-center px-4 py-2">
+                        <span className="line-clamp-1 max-w-[90%] text-center text-[12px] font-bold tracking-tight text-white/30 italic">
+                          {msg.message}
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        className={`flex items-start gap-3 ${msg.username === user?.username ? 'flex-row-reverse' : 'flex-row'}`}
+                      >
+                        <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full shadow-lg">
+                          {msg.avatarUrl ? (
+                            <Image
+                              src={msg.avatarUrl}
+                              alt={msg.username}
+                              fill
+                              unoptimized
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-black text-white/40">
+                              {msg.username?.[0]?.toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          className={`flex flex-col ${msg.username === user?.username ? 'items-end' : 'items-start'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-[10px] font-black tracking-tighter uppercase ${
+                                msg.username === room?.host?.username
+                                  ? 'text-[#C800DF]'
+                                  : 'text-white/40'
+                              }`}
+                            >
+                              {msg.username}
+                              {msg.username === user?.username && ' (Bạn)'}
+                            </span>
+                          </div>
+                          <p
+                            className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${
+                              msg.username === user?.username
+                                ? 'rounded-2xl rounded-tr-none border border-[#C800DF]/20 bg-[#C800DF]/20 text-white shadow-[0_0_10px_rgba(200,0,223,0.1)]'
+                                : 'text-white/90'
+                            }`}
+                          >
+                            {msg.message}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
+            </div>
+          )}
 
           {/* Chat Input */}
           <div className="border-t border-white/5 p-4">
+            {/* Emoji Reactions */}
+            <div className="mb-3 flex items-center justify-center gap-5">
+              {[
+                ['❤️', 'text-red-400'],
+                ['👍', 'text-blue-400'],
+                ['😂', 'text-yellow-400'],
+                ['🔥', 'text-orange-400'],
+              ].map(([emoji, cls]) => (
+                <button
+                  key={emoji}
+                  onClick={() => sendEmoji(emoji)}
+                  className={`${cls} transition-transform hover:scale-150 active:scale-125`}
+                >
+                  <span className="text-xl">{emoji}</span>
+                </button>
+              ))}
+            </div>
             <form
               onSubmit={handleSendMessage}
               className="flex flex-col gap-2 rounded-[20px] border border-white/10 bg-black/60 p-2 shadow-inner"
@@ -877,6 +927,53 @@ export default function WeWatchRoomPage({
           </div>
         </div>
       </div>
+      {/* Leave Confirmation Modal */}
+      <AnimatePresence>
+        {isLeaveModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsLeaveModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="glass relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-[#121214] p-8 shadow-2xl"
+            >
+              <div className="mb-6 flex justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                  <LogOut size={32} />
+                </div>
+              </div>
+              <h3 className="mb-2 text-center text-xl font-bold text-white">
+                Rời khỏi phòng?
+              </h3>
+              <p className="mb-8 text-center text-sm leading-relaxed text-white/60">
+                Bạn có chắc chắn muốn rời khỏi phòng này? Các thông tin của bạn
+                sẽ được xóa ngay lập tức.
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => router.push('/rooms')}
+                  className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
+                >
+                  Xác nhận rời phòng
+                </button>
+                <button
+                  onClick={() => setIsLeaveModalOpen(false)}
+                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Ở lại
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
