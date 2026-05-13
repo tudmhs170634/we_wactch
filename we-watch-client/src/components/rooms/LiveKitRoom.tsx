@@ -5,7 +5,7 @@ import {
   RoomAudioRenderer,
   useTracks,
   ParticipantTile,
-  TrackReference,
+  TrackReferenceOrPlaceholder,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { Mic, MicOff, Video, VideoOff } from 'lucide-react';
@@ -61,7 +61,7 @@ function MyVideoLayout() {
 
   return (
     <div className="flex h-full w-full gap-3 overflow-x-auto scrollbar-hide">
-      {tracks.map((track) => (
+      {tracks.map((track: TrackReferenceOrPlaceholder) => (
         <div key={`${track.participant.identity}_${track.source}`} className="relative h-full aspect-video flex-shrink-0">
           <ParticipantTile trackRef={track} />
         </div>

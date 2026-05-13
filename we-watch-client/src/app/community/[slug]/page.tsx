@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, use } from 'react';
+import React, { useState, useEffect, useRef, use, useMemo } from 'react';
 import { useSocket } from '@/src/hooks/useSocket';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import { MOCK_VIDEOS, MOCK_ROOMS } from '@/src/constants/mockData';
@@ -40,10 +40,6 @@ import {
   Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter } from 'next/navigation';
-import { useSocket } from '@/src/hooks/useSocket';
-import { useAuthStore } from '@/src/store/useAuthStore';
-import { getRoomBySlug } from '@/src/services/room';
 import { toast } from 'sonner';
 
 export default function CommunityRoomPage({
@@ -59,20 +55,6 @@ export default function CommunityRoomPage({
   const [room, setRoom] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
-
-  // --- SOCKET THẬT ---
-  // onRoomEnded: viewer tự redirect khi host emit endRoom
-  const { socket, members: socketMembers } = useSocket(
-    room?.id,
-    user,
-    () => router.push('/rooms') // callback khi nhận roomEnded
-  );
-
-  // Viewers = toàn bộ thành viên KHÔNG tính host
-  const viewers = socketMembers.filter(
-    (m) => m.username !== room?.host?.username
-  );
-  const viewersCount = viewers.length;
 
   // --- FETCH DATA ---
   useEffect(() => {
@@ -123,6 +105,7 @@ export default function CommunityRoomPage({
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const {
+    socket,
     members: socketMembers,
     messages,
     emojis,
@@ -133,7 +116,19 @@ export default function CommunityRoomPage({
     socketError,
     currentHostId,
     setCurrentHostId,
-  } = useSocket(room?.id, user);
+  } = useSocket(
+    room?.id,
+    user,
+    undefined,
+    () => router.push('/rooms')
+  );
+
+  const viewers = useMemo(() => {
+    if (!socketMembers) return [];
+    return socketMembers.filter(
+      (m) => m.username !== room?.host?.username
+    );
+  }, [socketMembers, room?.host?.username]);
 
   // Load room by slug
   useEffect(() => {
@@ -356,52 +351,20 @@ export default function CommunityRoomPage({
                           </div>
                           <span className="text-sm font-medium text-white/70">
                             {m.username}
+                            {m.username === user?.username && ' (Bạn)'}
                           </span>
                         </div>
-                        {isHost && (
+                        {isHost && m.username !== room?.host?.username && (
                           <button
                             onClick={() => handleKick(m.username)}
-                            className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125"
+                            className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125 animate-fade-in"
                           >
-                            <div className="flex items-center gap-3">
-                              <div className="relative h-8 w-8 overflow-hidden rounded-full border border-white/10">
-                                {m.avatarUrl ? (
-                                  <Image
-                                    src={m.avatarUrl}
-                                    alt={m.username}
-                                    fill
-                                    unoptimized
-                                    className="object-cover"
-                                  />
-                                ) : (
-                                  <div className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-black text-white/40">
-                                    {m.username?.[0]?.toUpperCase()}
-                                  </div>
-                                )}
-                              </div>
-                              <span className="text-sm font-medium text-white/80">
-                                {m.username}
-                                {m.username === user?.username && ' (Bạn)'}
-                              </span>
-                            </div>
-                            {isHost && m.username !== room?.host?.username && (
-                              <button
-                                onClick={() => handleKick(m.username)}
-                                className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125"
-                              >
-                                <UserMinus size={14} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        {socketMembers.length === 0 && (
-                          <div className="py-4 text-center text-[11px] text-white/20 italic">
-                            Chưa có ai trong phòng
-                          </div>
+                            <UserMinus size={14} />
+                          </button>
                         )}
                       </div>
                     ))}
-                    {viewers.length === 0 && !room?.host && (
+                    {viewers.length === 0 && (
                       <p className="text-center text-xs text-white/30 italic">
                         Chưa có ai trong phòng
                       </p>
@@ -540,7 +503,7 @@ export default function CommunityRoomPage({
               <span className="mx-1 h-3 w-px bg-white/20"></span>
               <Users size={12} className="text-white/60" />
               <span className="text-xs font-bold text-white">
-                {viewersCount}
+                {viewers.length}
               </span>
             </div>
           </div>

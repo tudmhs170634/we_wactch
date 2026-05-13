@@ -51,6 +51,9 @@ export class RedisService implements OnModuleDestroy {
       }
     } catch (err: any) {
       this.logger.warn(`Redis delPattern failed: ${err.message}`);
+    }
+  }
+
   /** Push một item vào đầu list (newest-first). Tự trim xuống maxLen items */
   async lpush(key: string, value: unknown, maxLen = 100): Promise<void> {
     try {
