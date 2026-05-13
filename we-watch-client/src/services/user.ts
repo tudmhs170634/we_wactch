@@ -10,8 +10,8 @@ export interface User {
   createdAt: string;
 }
 
-export const getAllUsers = async (): Promise<User[]> => {
-  const { data } = await api.get('/users');
+export const getAllUsers = async (page = 1, limit = 50, search?: string) => {
+  const { data } = await api.get('/users', { params: { page, limit, search } });
   return data;
 };
 
@@ -24,3 +24,4 @@ export const switchRole = async (id: string) => {
   const { data } = await api.patch(`/users/${id}/switch-role`);
   return data;
 };
+

@@ -53,10 +53,15 @@ export class VideoController {
   @Get('admin')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  findAllAdmin(@Query('page') page?: string, @Query('limit') limit?: string) {
+  findAllAdmin(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
     return this.videoService.findAllAdmin(
       page ? parseInt(page) : 1,
       limit ? parseInt(limit) : 50,
+      search,
     );
   }
 

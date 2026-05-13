@@ -18,11 +18,28 @@ const USER_SELECT = {
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
-    return this.prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: USER_SELECT,
-    });
+  async findAll(page = 1, limit = 50, search?: string) {
+    const where = search
+      ? {
+          OR: [
+            { username: { contains: search, mode: 'insensitive' as const } },
+            {
+              email: { contains: search, mode: 'insensitive' as const },
+            },
+          ],
+        }
+      : {};
+    const [users, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: USER_SELECT,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return { users, total, page, totalPages: Math.ceil(total / limit) };
   }
 
   async setBanned(userId: string, isBanned: boolean) {

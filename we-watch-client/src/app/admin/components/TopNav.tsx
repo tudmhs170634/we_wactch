@@ -5,9 +5,12 @@ import { Search, Bell, HelpCircle } from 'lucide-react';
 interface TopNavProps {
   user: any;
   onProfileClick: () => void;
+  searchTerm: string;
+  onSearchChange: (val: string) => void;
+  placeholder?: string;
 }
 
-const TopNav: React.FC<TopNavProps> = ({ user, onProfileClick }) => {
+const TopNav: React.FC<TopNavProps> = ({ user, onProfileClick, searchTerm, onSearchChange, placeholder = 'Tìm kiếm dữ liệu...' }) => {
   return (
     <div className="mb-10 flex items-center justify-between">
       <div className="group relative w-96">
@@ -17,7 +20,9 @@ const TopNav: React.FC<TopNavProps> = ({ user, onProfileClick }) => {
         />
         <input
           type="text"
-          placeholder="Tìm kiếm dữ liệu..."
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={placeholder}
           className="h-11 w-full rounded-full bg-white/10 pr-4 pl-11 text-sm font-medium transition-all outline-none focus:bg-[#111113] border border-white/5 focus:ring-2 focus:ring-red-100"
         />
       </div>

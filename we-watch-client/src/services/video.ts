@@ -53,8 +53,10 @@ export const getVideos = async (page = 1, limit = 12, search?: string) => {
   return data;
 };
 
-export const getVideosAdmin = async (page = 1, limit = 50) => {
-  const { data } = await api.get('/videos/admin', { params: { page, limit } });
+export const getVideosAdmin = async (page = 1, limit = 50, search?: string) => {
+  const { data } = await api.get('/videos/admin', {
+    params: { page, limit, search },
+  });
   return data;
 };
 

@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
+export const useSocket = (roomId?: string, user?: any, onRoomEnded?: () => void) => {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [members, setMembers] = useState<any[]>([]);
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {
@@ -99,6 +102,12 @@ export const useSocket = (roomId?: string, user?: any, password?: string) => {
       setMembers((prev) => prev.filter((m) => m.username !== username));
     });
 
+    // Lắng nghe khi host kết thúc phòng
+    newSocket.on('roomEnded', () => {
+      onRoomEnded?.();
+    });
+
+    setSocket(newSocket);
     // ── Chat ─────────────────────────────────────────────────────────────────
     socket.on('chatHistory', (history: ChatMessage[]) => {
       setMessages(history);
