@@ -37,11 +37,15 @@ export class RoomController {
         @Query('page') page?: string,
         @Query('limit') limit?: string,
         @Query('type') type?: string,
+        @Query('hostId') hostId?: string,
+        @Query('onlyActive') onlyActive?: string,
     ) {
         return this.roomService.findAll(
             page ? parseInt(page) : 1,
             limit ? parseInt(limit) : 10,
             type,
+            onlyActive === 'true',
+            hostId,
         );
     }
 

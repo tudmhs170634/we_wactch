@@ -10,6 +10,7 @@ import JoinRoomModal from '@/src/components/rooms/JoinRoomModal';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import { getRooms } from '@/src/services/room';
 import { useRouter } from 'next/navigation';
+import { io } from 'socket.io-client';
 
 type RoomTypeFilter = 'all' | 'public' | 'private';
 
@@ -19,6 +20,7 @@ type Room = {
   slug: string;
   type: 'public' | 'private';
   maxUsers: number;
+  currentUsers: number;
   isActive: boolean;
   image?: string | null;
   createdAt: string;
@@ -60,14 +62,46 @@ export default function RoomsPage() {
     fetchRooms();
   }, [fetchRooms]);
 
+  // Real-time updates for rooms list
+  useEffect(() => {
+    const socket = io(
+      process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000'
+    );
+    socket.emit('joinRoomsList');
+
+    socket.on(
+      'roomUpdate',
+      ({ roomId, currentUsers }: { roomId: string; currentUsers: number }) => {
+        setRooms((prev) =>
+          prev.map((r) => (r.id === roomId ? { ...r, currentUsers } : r))
+        );
+      }
+    );
+    
+    socket.on('roomListChanged', () => {
+      fetchRooms();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rooms.filter((r) => {
       const matchType = typeFilter === 'all' || r.type === typeFilter;
       const matchTitle = q ? r.title.toLowerCase().includes(q) : true;
-      return matchType && matchTitle;
+      // Trong danh sách chung, không hiện lại phòng của mình nếu không muốn trùng lặp?
+      // Hoặc cứ hiện, nhưng user muốn "section riêng" thì thường là tách ra.
+      // Tôi sẽ tách ra: danh sách chung chỉ hiện phòng của người khác.
+      return matchType && matchTitle && r.host?.id !== user?.id && r.isActive;
     });
-  }, [rooms, typeFilter, query]);
+  }, [rooms, typeFilter, query, user?.id]);
+
+  const myRooms = useMemo(() => {
+    return rooms.filter((r) => r.host?.id === user?.id && r.isActive);
+  }, [rooms, user?.id]);
 
   return (
     <main className="relative min-h-screen font-sans text-slate-100">
@@ -164,6 +198,42 @@ export default function RoomsPage() {
           </div>
         </div>
 
+        {/* My Rooms Section */}
+        {myRooms.length > 0 && (
+          <div className="mb-8">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="bg-primary h-1.5 w-1.5 animate-pulse rounded-full" />
+              <h2 className="text-xl font-bold text-white">Phòng của tôi</h2>
+              <span className="bg-primary/10 text-primary rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase">
+                {myRooms.length} đang mở
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {myRooms.map((room, idx) => (
+                <RoomCard
+                  key={room.id}
+                  room={room}
+                  idx={idx}
+                  router={router}
+                  user={user}
+                  setJoinModalRoom={setJoinModalRoom}
+                />
+              ))}
+            </div>
+            <div className="mt-8 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+          </div>
+        )}
+
+        {/* All Rooms List */}
+        <div className="mb-7 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
+            <h2 className="text-xl font-bold text-white">
+              Khám phá phòng chiếu
+            </h2>
+          </div>
+        </div>
+
         {/* Loading skeleton */}
         {loading && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -203,78 +273,14 @@ export default function RoomsPage() {
         {!loading && filtered.length > 0 && (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filtered.map((room, idx) => (
-              <div
+              <RoomCard
                 key={room.id}
-                onClick={() => {
-                  if (room.type === 'private') {
-                    setJoinModalRoom(room);
-                  } else {
-                    router.push(`/private/${room.id}`);
-                  }
-                }}
-                className="glass group hover:border-primary/30 rounded-bento relative cursor-pointer overflow-hidden border border-white/10 bg-white/5 p-6 transition-all"
-              >
-                {/* Join Overlay Button on Hover */}
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 opacity-0 transition-all group-hover:opacity-100">
-                  <button className="translate-y-4 transform rounded-full bg-pink-600 px-6 py-2 font-black text-white transition-all group-hover:translate-y-0">
-                    Tham gia ngay
-                  </button>
-                </div>
-
-                <div className="flex items-start gap-4">
-                  <div className="relative h-14 w-14 shrink-0">
-                    <Image
-                      src={
-                        room.image ??
-                        room.video?.thumbnailUrl ??
-                        FALLBACK_BANNERS[idx % 3]
-                      }
-                      alt={room.title}
-                      fill
-                      className="group-hover:ring-primary/50 rounded-2xl object-cover ring-2 ring-white/10 transition-all"
-                    />
-                    <div
-                      className={`absolute -right-1 -bottom-1 h-4 w-4 rounded-full border-2 border-[#0A0A0B] ${room.isActive ? 'bg-green-500' : 'bg-white/20'}`}
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="group-hover:text-primary line-clamp-2 font-bold text-white transition-colors">
-                      {room.title}
-                    </h3>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-black tracking-widest text-white/70 uppercase">
-                        {room.type === 'private' ? (
-                          <>
-                            <Lock className="h-2.5 w-2.5" /> Private
-                          </>
-                        ) : (
-                          <>
-                            <Globe className="h-2.5 w-2.5" /> Public
-                          </>
-                        )}
-                      </span>
-                      {room.video && (
-                        <span
-                          className="max-w-[200px] truncate rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-white/70"
-                          title={room.video.title}
-                        >
-                          Đang chiếu: {room.video.title}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-4">
-                  <div className="flex items-center gap-1 text-[11px] font-bold text-white/60">
-                    <Users className="h-3 w-3" />
-                    Tối đa {room.maxUsers} người
-                  </div>
-                  <div className="text-[10px] font-bold text-white/40">
-                    {room.host?.username ?? 'Unknown'}
-                  </div>
-                </div>
-              </div>
+                room={room}
+                idx={idx}
+                router={router}
+                user={user}
+                setJoinModalRoom={setJoinModalRoom}
+              />
             ))}
           </div>
         )}
@@ -294,5 +300,120 @@ export default function RoomsPage() {
         onClose={() => setJoinModalRoom(null)}
       />
     </main>
+  );
+}
+
+function RoomCard({
+  room,
+  idx,
+  router,
+  user,
+  setJoinModalRoom,
+}: {
+  room: Room;
+  idx: number;
+  router: any;
+  user: any;
+  setJoinModalRoom: (room: Room | null) => void;
+}) {
+  const isHost = user && room.host?.id === user.id;
+  const isAdmin = user && user.role === 'admin';
+
+  return (
+    <div
+      onClick={() => {
+        if (room.currentUsers >= room.maxUsers && !isHost && !isAdmin) return;
+
+        if (room.type === 'private' && !isHost && !isAdmin) {
+          setJoinModalRoom(room);
+        } else {
+          // Đánh dấu người dùng này đi từ luồng "Join" hợp lệ
+          sessionStorage.setItem(`ww_auth_${room.slug}`, 'true');
+          
+          const targetPath =
+            room.type === 'private'
+              ? `/private/${room.slug}`
+              : `/community/${room.slug}`;
+          router.push(targetPath);
+        }
+      }}
+      className="glass group hover:border-primary/30 rounded-bento relative cursor-pointer overflow-hidden border border-white/10 bg-white/5 p-6 transition-all"
+    >
+      {/* Join Overlay Button on Hover */}
+      <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 opacity-0 transition-all group-hover:opacity-100">
+        {room.currentUsers >= room.maxUsers ? (
+          <button
+            disabled
+            className="translate-y-4 transform cursor-not-allowed rounded-full bg-white/10 px-6 py-2 font-black text-white/40 transition-all group-hover:translate-y-0"
+          >
+            Phòng đã đầy
+          </button>
+        ) : (
+          <button className="translate-y-4 transform rounded-full bg-pink-600 px-6 py-2 font-black text-white transition-all group-hover:translate-y-0">
+            Tham gia ngay
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-start gap-4">
+        <div className="relative h-14 w-14 shrink-0">
+          <Image
+            src={
+              room.image ??
+              room.video?.thumbnailUrl ??
+              FALLBACK_BANNERS[idx % 3]
+            }
+            alt={room.title}
+            fill
+            className="group-hover:ring-primary/50 rounded-2xl object-cover ring-2 ring-white/10 transition-all"
+          />
+          <div
+            className={`absolute -right-1 -bottom-1 h-4 w-4 rounded-full border-2 border-[#0A0A0B] ${
+              room.isActive ? 'bg-green-500' : 'bg-white/20'
+            }`}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="group-hover:text-primary line-clamp-2 font-bold text-white transition-colors">
+            {room.title}
+          </h3>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-black tracking-widest text-white/70 uppercase">
+              {room.type === 'private' ? (
+                <>
+                  <Lock className="h-2.5 w-2.5" /> Private
+                </>
+              ) : (
+                <>
+                  <Globe className="h-2.5 w-2.5" /> Public
+                </>
+              )}
+            </span>
+            <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-black tracking-widest text-[#C800DF] uppercase">
+              <Users className="h-2.5 w-2.5" /> {room.currentUsers || 0}/
+              {room.maxUsers || 5}
+            </span>
+            {room.video && (
+              <span
+                className="max-w-[200px] truncate rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-white/70"
+                title={room.video.title}
+              >
+                Đang chiếu: {room.video.title}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-4">
+        <div className="flex items-center gap-1 text-[11px] font-bold text-white/60">
+          <Users className="h-3 w-3" />
+          Tối đa {room.maxUsers} người
+        </div>
+        <div className="text-[10px] font-bold text-white/40">
+          {room.host?.username ?? 'Unknown'}
+        </div>
+      </div>
+    </div>
   );
 }

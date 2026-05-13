@@ -8,7 +8,7 @@ import { verifyRoomPassword } from '@/src/services/room';
 import { useRouter } from 'next/navigation';
 
 interface JoinRoomModalProps {
-  room: { id: string; title: string; type: string } | null;
+  room: { id: string; title: string; type: string; slug?: string } | null;
   onClose: () => void;
 }
 
@@ -26,10 +26,16 @@ export default function JoinRoomModal({ room, onClose }: JoinRoomModalProps) {
     try {
       await verifyRoomPassword(room.id, password);
       toast.success('Mật khẩu chính xác!');
-      router.push(`/private/${room.id}`);
+      
+      // Lưu mật khẩu và cờ xác thực vào sessionStorage
+      sessionStorage.setItem(`room_pwd_${room.slug || room.id}`, password);
+      sessionStorage.setItem(`ww_auth_${room.slug || room.id}`, 'true');
+      
+      router.push(`/private/${room.slug || room.id}`);
       onClose();
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Sai mật khẩu phòng.');
+      const message = err.response?.data?.message || 'Sai mật khẩu phòng.';
+      toast.error(message, { id: 'room-verify-error' });
     } finally {
       setLoading(false);
     }

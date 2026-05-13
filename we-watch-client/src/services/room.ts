@@ -3,12 +3,16 @@ import api from '../lib/axios';
 export interface Room {
   id: string;
   title: string;
+  slug: string;
   type: 'public' | 'private';
   hostId: string;
   videoId?: string;
   image?: string | null;
+  isActive: boolean;
+  maxUsers: number;
   createdAt: string;
   host?: {
+    id: string;
     username: string;
     avatarUrl?: string;
   };
@@ -40,9 +44,11 @@ export const createRoom = async (payload: CreateRoomPayload) => {
   return data;
 };
 
-export const getRooms = async (page = 1, limit = 10, type?: string) => {
+export const getRooms = async (page = 1, limit = 10, type?: string, hostId?: string, onlyActive?: boolean) => {
   const params: any = { page, limit };
   if (type) params.type = type;
+  if (hostId) params.hostId = hostId;
+  if (onlyActive !== undefined) params.onlyActive = onlyActive;
   const { data } = await api.get('/rooms', { params });
   return data;
 };
