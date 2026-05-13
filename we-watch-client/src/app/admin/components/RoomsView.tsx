@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { PlayCircle, Trash2, MonitorPlay } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { getRooms, Room } from '@/src/services/room';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getRooms, deleteRoom, Room } from '@/src/services/room';
+import { toast } from 'sonner';
 
 interface RoomsViewProps {
   globalSearchTerm: string;
@@ -19,9 +20,23 @@ const RoomsView: React.FC<RoomsViewProps> = ({
   const [page, setPage] = useState(1);
   const cleanSearch = globalSearchTerm?.trim() || '';
 
+  const queryClient = useQueryClient();
+
   useEffect(() => {
     setPage(1);
   }, [cleanSearch, filterType]);
+
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa phòng này không?')) return;
+    try {
+      await deleteRoom(roomId);
+      toast.success('Xóa phòng thành công!');
+      queryClient.invalidateQueries({ queryKey: ['admin-rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Xóa phòng thất bại');
+    }
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-rooms', filterType, page, 9, cleanSearch],
@@ -119,7 +134,10 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                 >
                   Giám sát
                 </Link>
-                <button className="rounded-2xl bg-red-500/10 px-4 text-red-500 transition-colors hover:bg-red-500 hover:text-white">
+                <button 
+                  onClick={() => handleDeleteRoom(room.id)}
+                  className="rounded-2xl bg-red-500/10 px-4 text-red-500 transition-colors hover:bg-red-500 hover:text-white"
+                >
                   <Trash2 size={18} />
                 </button>
               </div>

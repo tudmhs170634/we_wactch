@@ -172,7 +172,8 @@ export default function CreateRoomModal({
       toast.success('Tạo phòng thành công!');
       onCreated?.(room);
       // Dùng window.location để đảm bảo redirect ngay lập tức
-      window.location.href = `/private/${room.id}`;
+      const route = room.type === 'public' ? 'community' : 'private';
+      window.location.href = `/${route}/${room.id}`;
     } catch (err: any) {
       console.error('Create room error:', err);
       toast.error(

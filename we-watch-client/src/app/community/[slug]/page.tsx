@@ -1,10 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, use } from 'react';
+import { useSocket } from '@/src/hooks/useSocket';
+import { useAuthStore } from '@/src/store/useAuthStore';
 import { MOCK_VIDEOS, MOCK_ROOMS } from '@/src/constants/mockData';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Select from '@/src/components/ui/Select';
+import { getRoom, getRoomBySlug, deleteRoom } from '@/src/services/room';
+import api from '@/src/lib/axios';
+import VideoPlayer from '@/src/components/videos/VideoPlayer';
 import {
   Play,
   Pause,
@@ -76,12 +82,63 @@ const MOCK_PARTICIPANTS = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 export default function CommunityRoomPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [viewersCount, setViewersCount] = useState(128);
+  const params = use(paramsPromise);
+  const { user } = useAuthStore();
+  const router = useRouter();
+
+  // --- STATE DỬ LIỆU PHÒNG ---
+  const [room, setRoom] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+
+  // --- SOCKET THẬT ---
+  // onRoomEnded: viewer tự redirect khi host emit endRoom
+  const { socket, members: socketMembers } = useSocket(
+    room?.id,
+    user,
+    () => router.push('/rooms') // callback khi nhận roomEnded
+  );
+
+  // Viewers = toàn bộ thành viên KHÔNG tính host
+  const viewers = socketMembers.filter(
+    (m) => m.username !== room?.host?.username
+  );
+  const viewersCount = viewers.length;
+
+  // --- FETCH DATA ---
+  useEffect(() => {
+    const fetchRoom = async () => {
+      if (!params.slug) return;
+      try {
+        setLoading(true);
+        let data;
+        try {
+          data = await getRoom(params.slug);
+        } catch {
+          data = await getRoomBySlug(params.slug);
+        }
+        setRoom(data);
+
+        if (data.videoId) {
+          try {
+            const res = await api.get(`/videos/${data.videoId}/stream-url`);
+            setStreamUrl(res.data.url);
+          } catch (e) {
+            console.error('Fetch stream error:', e);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRoom();
+  }, [params.slug]);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState(MOCK_CHAT);
   const [emojis, setEmojis] = useState<
@@ -93,7 +150,7 @@ export default function CommunityRoomPage({
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
-  const [isHost, setIsHost] = useState(true); // Mocking host view
+  const [isHost, setIsHost] = useState(false); // Sẽ được tính lại sau khi có room + user
   const [isHostMicOn, setIsHostMicOn] = useState(true);
   const [isHostCamOn, setIsHostCamOn] = useState(true);
 
@@ -105,12 +162,35 @@ export default function CommunityRoomPage({
     }
   }, [messages]);
 
+  // Tính isHost thật dựa trên user đang đăng nhập vs host của phòng
   useEffect(() => {
-    const interval = setInterval(() => {
-      setViewersCount((prev) => prev + Math.floor(Math.random() * 5) - 2);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    if (room && user) {
+      setIsHost(room.host?.username === user.username);
+    }
+  }, [room, user]);
+
+
+  const handleLeaveRoom = () => {
+    if (!room || !user) return;
+    socket?.emit('leaveRoom', { roomId: room.id, username: user.username });
+    router.push('/rooms');
+  };
+
+  const handleEndRoom = async () => {
+    if (!room || !user) return;
+    if (!window.confirm('Bạn có chắc muốn kết thúc phòng? Tất cả người xem sẽ bị đưa ra ngoài.')) return;
+    try {
+      // Notify tất cả người trong phòng trước
+      socket?.emit('endRoom', { roomId: room.id });
+      // Xóa phòng trên server
+      await deleteRoom(room.id);
+    } catch (err) {
+      console.error('End room error:', err);
+    } finally {
+      // Host cũng redirect về /rooms
+      router.push('/rooms');
+    }
+  };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -170,23 +250,20 @@ export default function CommunityRoomPage({
           </span>
           <div className="h-4 w-px bg-white/20"></div>
           <h1 className="text-sm font-bold text-white">
-            Phòng Anime - Overlord Marathon
+            {loading ? 'Đang tải...' : room?.title || 'Phòng Cộng Đồng'}
           </h1>
           <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
             Community
           </span>
         </Link>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsHost(!isHost)}
-            className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold transition-all ${isHost ? 'bg-[#C800DF]/20 text-[#C800DF]' : 'bg-white/5 text-white/60'}`}
-          >
-            {isHost ? 'View as Host' : 'View as Viewer'}
-          </button>
           <button className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/10">
             <Share2 size={14} /> Chia sẻ
           </button>
-          <button className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30">
+          <button
+            onClick={isHost ? handleEndRoom : handleLeaveRoom}
+            className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30"
+          >
             <LogOut size={14} /> {isHost ? 'Kết thúc phòng' : 'Rời phòng'}
           </button>
         </div>
@@ -228,49 +305,63 @@ export default function CommunityRoomPage({
                   className="overflow-hidden"
                 >
                   <div className="scrollbar-hide flex max-h-[300px] flex-col gap-3 overflow-y-auto p-4">
-                    {/* Host */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="relative h-8 w-8 overflow-hidden rounded-full border border-[#C800DF]">
-                          <Image
-                            src="https://i.pravatar.cc/150?u=1"
-                            alt="Host"
-                            fill
-                            unoptimized
-                            className="object-cover"
-                          />
+                    {/* Host - lấy từ dữ liệu phòng thật */}
+                    {room?.host && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-8 w-8 overflow-hidden rounded-full border border-[#C800DF]">
+                            {room.host.avatarUrl ? (
+                              <Image
+                                src={room.host.avatarUrl}
+                                alt={room.host.username}
+                                fill
+                                unoptimized
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center bg-[#C800DF]/20 text-xs font-bold text-[#C800DF]">
+                                {room.host.username?.[0]?.toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-sm font-bold text-white">
+                            {room.host.username}
+                          </span>
                         </div>
-                        <span className="text-sm font-bold text-white">
-                          Trung
+                        <span className="rounded-full border border-[#C800DF] px-2 py-0.5 text-[10px] font-bold text-[#C800DF]">
+                          Host
                         </span>
                       </div>
-                      <span className="rounded-full border border-[#C800DF] px-2 py-0.5 text-[10px] font-bold text-[#C800DF]">
-                        Host
-                      </span>
-                    </div>
-                    {/* Other Viewers */}
-                    {MOCK_PARTICIPANTS.slice(0, 8).map((m) => (
+                    )}
+                    {/* Viewers từ socket thật - không tính host */}
+                    {viewers.map((m, idx) => (
                       <div
-                        key={m.id}
+                        key={m.username || idx}
                         className="group flex items-center justify-between"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="relative h-8 w-8 overflow-hidden rounded-full opacity-60">
-                            <Image
-                              src={m.avatar}
-                              alt={m.name}
-                              fill
-                              unoptimized
-                              className="object-cover"
-                            />
+                          <div className="relative h-8 w-8 overflow-hidden rounded-full opacity-80">
+                            {m.avatarUrl ? (
+                              <Image
+                                src={m.avatarUrl}
+                                alt={m.username}
+                                fill
+                                unoptimized
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white/60">
+                                {m.username?.[0]?.toUpperCase()}
+                              </div>
+                            )}
                           </div>
-                          <span className="text-sm font-medium text-white/60">
-                            {m.name}
+                          <span className="text-sm font-medium text-white/70">
+                            {m.username}
                           </span>
                         </div>
                         {isHost && (
                           <button
-                            onClick={() => handleKick(m.name)}
+                            onClick={() => handleKick(m.username)}
                             className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125"
                           >
                             <UserMinus size={14} />
@@ -278,6 +369,11 @@ export default function CommunityRoomPage({
                         )}
                       </div>
                     ))}
+                    {viewers.length === 0 && !room?.host && (
+                      <p className="text-center text-xs text-white/30 italic">
+                        Chưa có ai trong phòng
+                      </p>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -418,16 +514,24 @@ export default function CommunityRoomPage({
         <div className="flex flex-1 flex-col gap-4 overflow-hidden">
           {/* Video Player Section */}
           <div className="group relative flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl">
-            <Image
-              src={MOCK_VIDEOS[0].backdrop}
-              alt="Video"
-              fill
-              unoptimized
-              className="object-cover opacity-80"
-            />
+            {streamUrl ? (
+              <VideoPlayer src={streamUrl} poster={room?.video?.thumbnailUrl} />
+            ) : room?.video ? (
+              <div className="flex h-full w-full animate-pulse items-center justify-center bg-white/5">
+                <span className="text-white/40 font-bold">Đang tải video...</span>
+              </div>
+            ) : (
+              <Image
+                src={room?.image || MOCK_VIDEOS[0].backdrop}
+                alt="Banner"
+                fill
+                unoptimized
+                className="object-cover opacity-80"
+              />
+            )}
 
             {/* Top Left Status */}
-            <div className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 backdrop-blur-md">
+            <div className="pointer-events-none absolute top-4 left-4 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 backdrop-blur-md">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
@@ -438,35 +542,6 @@ export default function CommunityRoomPage({
               <span className="text-xs font-bold text-white">
                 {viewersCount}
               </span>
-            </div>
-
-            {/* Video Controls (Hover) */}
-            <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-              <div className="flex flex-col gap-2 p-4">
-                <div className="group/seek relative h-1.5 w-full cursor-pointer rounded-full bg-white/20">
-                  <div className="absolute h-full w-1/3 rounded-full bg-[#C800DF] transition-all"></div>
-                  <div className="absolute top-1/2 left-1/3 h-3 w-3 -translate-x-1/2 -translate-y-1/2 scale-0 rounded-full bg-white shadow-lg transition-transform group-hover/seek:scale-100"></div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      className="text-white transition-colors hover:text-[#C800DF]"
-                    >
-                      {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-                    </button>
-                    <button className="text-white transition-colors hover:text-[#C800DF]">
-                      <Volume2 size={20} />
-                    </button>
-                    <span className="text-xs font-medium text-white/80">
-                      24:12 / 1:46:00
-                    </span>
-                  </div>
-                  <button className="text-white transition-colors hover:text-[#C800DF]">
-                    <Maximize size={20} />
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -533,7 +608,7 @@ export default function CommunityRoomPage({
             <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-black/60 px-2 py-1 backdrop-blur-md">
               <div className="h-1.5 w-1.5 rounded-full bg-[#C800DF]"></div>
               <span className="text-[10px] font-bold text-white">
-                Host: Trung
+                Host: {room?.host?.username || 'Đang tải...'}
               </span>
             </div>
 

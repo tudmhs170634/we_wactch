@@ -74,13 +74,13 @@ export class RoomController {
     @GetUser() user: any,
     @Body() dto: UpdateRoomDto,
   ) {
-    return this.roomService.update(id, user.userId, dto);
+    return this.roomService.update(id, user.userId, dto, user.role);
   }
 
   /** DELETE /rooms/:id — Xóa phòng (chỉ host) */
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   remove(@Param('id') id: string, @GetUser() user: any) {
-    return this.roomService.remove(id, user.userId);
+    return this.roomService.remove(id, user.userId, user.role);
   }
 }

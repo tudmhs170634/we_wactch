@@ -209,7 +209,7 @@ export default function RoomsPage() {
                   if (room.type === 'private') {
                     setJoinModalRoom(room);
                   } else {
-                    router.push(`/private/${room.id}`);
+                    router.push(`/community/${room.id}`);
                   }
                 }}
                 className="glass group hover:border-primary/30 rounded-bento relative cursor-pointer overflow-hidden border border-white/10 bg-white/5 p-6 transition-all"

@@ -84,12 +84,8 @@ export class RoomService {
       },
     });
 
-    // Xóa cache list
-    await this.redis.del(
-      ROOM_LIST_KEY(1, 10),
-      ROOM_LIST_KEY(1, 20),
-      ROOM_LIST_KEY(1, 100),
-    );
+    // Xóa toàn bộ cache list phòng
+    await this.redis.delPattern('rooms:list:*');
     return room;
   }
 
@@ -193,9 +189,11 @@ export class RoomService {
     return room;
   }
 
-  async update(id: string, userId: string, dto: UpdateRoomDto) {
+  async update(id: string, userId: string, dto: UpdateRoomDto, userRole?: string) {
     const room = await this.findOne(id);
-    if (room.hostId !== userId) throw new ForbiddenException();
+    if (room.hostId !== userId && userRole !== 'admin') {
+      throw new ForbiddenException('Chỉ chủ phòng hoặc admin mới có quyền.');
+    }
 
     if (dto.type === 'private' && !dto.password && !room.password) {
       throw new BadRequestException('Phòng private phải có password.');
@@ -219,26 +217,20 @@ export class RoomService {
       },
     });
 
-    await this.redis.del(
-      ROOM_KEY(id),
-      ROOM_SLUG_KEY(room.slug),
-      ROOM_LIST_KEY(1, 10),
-      ROOM_LIST_KEY(1, 20),
-    );
+    await this.redis.del(ROOM_KEY(id), ROOM_SLUG_KEY(room.slug));
+    await this.redis.delPattern('rooms:list:*');
     return updated;
   }
 
-  async remove(id: string, userId: string) {
+  async remove(id: string, userId: string, userRole?: string) {
     const room = await this.findOne(id);
-    if (room.hostId !== userId) throw new ForbiddenException();
+    if (room.hostId !== userId && userRole !== 'admin') {
+      throw new ForbiddenException('Chỉ chủ phòng hoặc admin mới có quyền xóa.');
+    }
 
     await this.prisma.room.delete({ where: { id } });
-    await this.redis.del(
-      ROOM_KEY(id),
-      ROOM_SLUG_KEY(room.slug),
-      ROOM_LIST_KEY(1, 10),
-      ROOM_LIST_KEY(1, 20),
-    );
+    await this.redis.del(ROOM_KEY(id), ROOM_SLUG_KEY(room.slug));
+    await this.redis.delPattern('rooms:list:*');
     return { message: 'Room deleted' };
   }
 
