@@ -37,49 +37,14 @@ import {
   Check,
   Copy,
   UserPlus,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const MOCK_CHAT = [
-  {
-    id: 1,
-    user: 'Trung',
-    role: 'host',
-    avatar: 'https://i.pravatar.cc/150?u=1',
-    message: 'Chào mừng mọi người đến với phòng video nhé!',
-    type: 'msg',
-  },
-  {
-    id: 2,
-    user: 'AnhKhoa',
-    role: 'viewer',
-    avatar: 'https://i.pravatar.cc/150?u=2',
-    message: 'Video nét quá host ơi',
-    type: 'msg',
-  },
-  {
-    id: 3,
-    user: 'system',
-    avatar: '',
-    message: 'Trung đang tua video...',
-    type: 'status',
-  },
-  {
-    id: 4,
-    user: 'LinhChi',
-    role: 'viewer',
-    avatar: 'https://i.pravatar.cc/150?u=3',
-    message: 'Đợi mãi mới đến tập này',
-    type: 'msg',
-  },
-];
-
-const MOCK_PARTICIPANTS = Array.from({ length: 12 }, (_, i) => ({
-  id: i,
-  name: `Viewer ${i + 1}`,
-  avatar: `https://i.pravatar.cc/150?u=${i + 10}`,
-  role: 'viewer',
-}));
+import { useRouter } from 'next/navigation';
+import { useSocket } from '@/src/hooks/useSocket';
+import { useAuthStore } from '@/src/store/useAuthStore';
+import { getRoomBySlug } from '@/src/services/room';
+import { toast } from 'sonner';
 
 export default function CommunityRoomPage({
   params: paramsPromise,
@@ -140,10 +105,6 @@ export default function CommunityRoomPage({
     fetchRoom();
   }, [params.slug]);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState(MOCK_CHAT);
-  const [emojis, setEmojis] = useState<
-    { id: number; emoji: string; x: number }[]
-  >([]);
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
   const [isInviteOpen, setIsInviteOpen] = useState(true);
@@ -153,12 +114,79 @@ export default function CommunityRoomPage({
   const [isHost, setIsHost] = useState(false); // Sẽ được tính lại sau khi có room + user
   const [isHostMicOn, setIsHostMicOn] = useState(true);
   const [isHostCamOn, setIsHostCamOn] = useState(true);
+  const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
+  const [visibleStatusIds, setVisibleStatusIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
+  const {
+    members: socketMembers,
+    messages,
+    emojis,
+    wishlist: socketWishlist,
+    wishlistError,
+    sendMessage,
+    sendEmoji,
+    socketError,
+    currentHostId,
+    setCurrentHostId,
+  } = useSocket(room?.id, user);
+
+  // Load room by slug
   useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    if (!params.slug) return;
+    getRoomBySlug(params.slug)
+      .then((data) => {
+        setRoom(data);
+        if (user && data?.host?.username === user.username) setIsHost(true);
+      })
+      .catch(() => {});
+  }, [params.slug, user]);
+
+  // Determine host
+  useEffect(() => {
+    if (room && user) {
+      const effectiveHostId = currentHostId || room.hostId || room.host?.id;
+      setIsHost(
+        effectiveHostId === user.id || room.host?.username === user.username
+      );
+
+      if (!currentHostId && (room.hostId || room.host?.id)) {
+        setCurrentHostId(room.hostId || room.host?.id);
+      }
+
+      // Final security check once room/user is loaded
+      const isAdmin = user.role === 'admin';
+      const authFlag = sessionStorage.getItem(`ww_auth_${params.slug}`);
+
+      if (
+        effectiveHostId !== user.id &&
+        room.host?.username !== user.username &&
+        !isAdmin &&
+        !authFlag
+      ) {
+        toast.error('Bạn chỉ có thể tham gia phòng từ danh sách phòng chiếu.');
+        router.push('/rooms');
+      }
+    }
+  }, [room, user, currentHostId, setCurrentHostId, params.slug, router]);
+
+  // Handle disappearing status messages in Chat tab
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg?.type === 'status') {
+      setVisibleStatusIds((prev) => new Set(prev).add(lastMsg.id));
+      const timer = setTimeout(() => {
+        setVisibleStatusIds((prev) => {
+          const next = new Set(prev);
+          next.delete(lastMsg.id);
+          return next;
+        });
+      }, 2000);
+      return () => clearTimeout(timer);
     }
   }, [messages]);
 
@@ -195,26 +223,12 @@ export default function CommunityRoomPage({
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        user: 'Me',
-        role: 'viewer',
-        avatar: 'https://i.pravatar.cc/150?u=99',
-        message: chatInput,
-        type: 'msg',
-      },
-    ]);
+    sendMessage(chatInput);
     setChatInput('');
   };
 
   const spawnEmoji = (emoji: string) => {
-    const newEmoji = { id: Date.now(), emoji, x: Math.random() * 80 + 10 };
-    setEmojis((prev) => [...prev, newEmoji]);
-    setTimeout(() => {
-      setEmojis((prev) => prev.filter((e) => e.id !== newEmoji.id));
-    }, 2000);
+    sendEmoji(emoji);
   };
 
   const handleKick = (name: string) => {
@@ -223,21 +237,6 @@ export default function CommunityRoomPage({
 
   const handleShareScreen = () => {
     alert('Bắt đầu chia sẻ màn hình...');
-  };
-
-  const generateInviteLink = () => {
-    const randomChars = Math.random()
-      .toString(36)
-      .substring(2, 8)
-      .toUpperCase();
-    setInviteLink(`wewatch.app/join/${randomChars}`);
-  };
-
-  const copyLink = () => {
-    if (!inviteLink) return;
-    navigator.clipboard.writeText(inviteLink);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
   };
 
   return (
@@ -284,7 +283,7 @@ export default function CommunityRoomPage({
                 </span>
                 <div className="flex items-center gap-1.5 text-xs text-green-400">
                   <div className="h-1.5 w-1.5 rounded-full bg-green-400"></div>
-                  {viewersCount} online
+                  {socketMembers.length} online
                 </div>
               </div>
               <div className="rounded-lg border border-white/10 p-1 text-white/60">
@@ -364,8 +363,41 @@ export default function CommunityRoomPage({
                             onClick={() => handleKick(m.username)}
                             className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125"
                           >
-                            <UserMinus size={14} />
-                          </button>
+                            <div className="flex items-center gap-3">
+                              <div className="relative h-8 w-8 overflow-hidden rounded-full border border-white/10">
+                                {m.avatarUrl ? (
+                                  <Image
+                                    src={m.avatarUrl}
+                                    alt={m.username}
+                                    fill
+                                    unoptimized
+                                    className="object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-black text-white/40">
+                                    {m.username?.[0]?.toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-sm font-medium text-white/80">
+                                {m.username}
+                                {m.username === user?.username && ' (Bạn)'}
+                              </span>
+                            </div>
+                            {isHost && m.username !== room?.host?.username && (
+                              <button
+                                onClick={() => handleKick(m.username)}
+                                className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125"
+                              >
+                                <UserMinus size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {socketMembers.length === 0 && (
+                          <div className="py-4 text-center text-[11px] text-white/20 italic">
+                            Chưa có ai trong phòng
+                          </div>
                         )}
                       </div>
                     ))}
@@ -409,42 +441,10 @@ export default function CommunityRoomPage({
                     exit={{ height: 0, opacity: 0 }}
                     className="flex flex-col gap-4 p-4"
                   >
-                    <p className="text-[11px] leading-relaxed text-white/40">
-                      Bạn bè tham gia qua link này sẽ được vào nhóm chat & video
-                      call riêng với bạn.
+                    <p className="text-[11px] font-bold text-white/40">
+                      Vui lòng mời bạn bè tham gia thông qua danh sách phòng
+                      chiếu tại trang chủ.
                     </p>
-
-                    {inviteLink ? (
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between rounded-xl bg-black/40 p-3 ring-1 ring-white/5">
-                          <span className="font-mono text-xs font-black text-[#00E5FF]">
-                            {inviteLink}
-                          </span>
-                          <button
-                            onClick={copyLink}
-                            className="text-white/40 transition-colors hover:text-white"
-                          >
-                            {isCopied ? (
-                              <Check size={16} className="text-green-400" />
-                            ) : (
-                              <Copy size={16} />
-                            )}
-                          </button>
-                        </div>
-                        <div className="flex items-center justify-center gap-2 rounded-lg bg-[#00E5FF]/10 py-2 text-[10px] font-bold text-[#00E5FF]">
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#00E5FF]"></span>
-                          Link có hiệu lực trong 24h
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={generateInviteLink}
-                        className="group relative overflow-hidden rounded-xl bg-[#00E5FF] px-4 py-3 text-xs font-black tracking-widest text-black uppercase transition-all hover:scale-[1.02] active:scale-95"
-                      >
-                        Tạo link mời nhóm riêng
-                        <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-500 group-hover:translate-x-full"></div>
-                      </button>
-                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -568,7 +568,7 @@ export default function CommunityRoomPage({
                   ))}
                 </div>
                 <span className="text-xs font-bold text-white/60">
-                  Và {viewersCount - 3} người khác đang xem
+                  Và {Math.max(0, socketMembers.length - 3)} người khác đang xem
                 </span>
               </div>
             )}
@@ -645,63 +645,120 @@ export default function CommunityRoomPage({
             )}
           </div>
 
-          <div className="border-b border-white/5 p-4">
-            <span className="text-sm font-bold tracking-tighter text-white uppercase">
-              Trò chuyện trực tiếp
-            </span>
+          {/* Chat Header with Tabs */}
+          <div className="flex items-center justify-between border-b border-white/5 p-4">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`text-sm font-bold tracking-tighter uppercase transition-colors ${
+                  activeTab === 'chat' ? 'text-white' : 'text-white/20'
+                }`}
+              >
+                Trò chuyện
+              </button>
+              <div className="h-4 w-px bg-white/10"></div>
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`text-sm font-bold tracking-tighter uppercase transition-colors ${
+                  activeTab === 'history' ? 'text-white' : 'text-white/20'
+                }`}
+              >
+                Lịch sử
+              </button>
+            </div>
+            <div className="flex gap-3 text-white/40">
+              <Volume2 size={16} className="cursor-pointer hover:text-white" />
+              <Maximize size={16} className="cursor-pointer hover:text-white" />
+            </div>
           </div>
 
           {/* Chat Messages */}
-          <div
-            ref={chatScrollRef}
-            className="scrollbar-hide flex-1 space-y-4 overflow-y-auto p-4"
-          >
-            {messages.map((msg) => (
-              <React.Fragment key={msg.id}>
-                {msg.type === 'status' ? (
-                  <div className="flex w-full justify-center py-2">
-                    <span className="text-[13px] font-medium text-white/30 italic">
-                      {msg.message}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3">
-                    <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full shadow-lg">
-                      <Image
-                        src={msg.avatar}
-                        alt={msg.user}
-                        fill
-                        unoptimized
-                        className="object-cover"
-                      />
-                    </div>
-                    <div className="flex flex-col items-start">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[10px] font-black tracking-tighter uppercase ${msg.role === 'host' ? 'text-[#C800DF]' : 'text-white/40'}`}
-                        >
-                          {msg.user}
+          {!room ? (
+            <div className="flex flex-1 flex-col items-center justify-center opacity-40">
+              <Loader2 className="animate-spin text-[#C800DF]" size={24} />
+              <span className="mt-3 text-xs font-black tracking-widest uppercase">
+                Đang tải cuộc trò chuyện...
+              </span>
+            </div>
+          ) : (
+            <div
+              ref={chatScrollRef}
+              className="scrollbar-hide flex-1 space-y-4 overflow-y-auto p-4"
+            >
+              {messages
+                .filter((msg) =>
+                  activeTab === 'history'
+                    ? msg.type === 'status'
+                    : msg.type === 'msg' || visibleStatusIds.has(msg.id)
+                )
+                .map((msg) => (
+                  <React.Fragment key={msg.id}>
+                    {msg.type === 'status' ? (
+                      <div className="flex w-full justify-center px-4 py-2">
+                        <span className="line-clamp-1 max-w-[90%] text-center text-[12px] font-bold tracking-tight text-white/30 italic">
+                          {msg.message}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-[14px] leading-tight text-white/90">
-                        {msg.message}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </React.Fragment>
-            ))}
-          </div>
+                    ) : (
+                      <div
+                        className={`flex items-start gap-3 ${msg.username === user?.username ? 'flex-row-reverse' : 'flex-row'}`}
+                      >
+                        <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full shadow-lg">
+                          {msg.avatarUrl ? (
+                            <Image
+                              src={msg.avatarUrl}
+                              alt={msg.username}
+                              fill
+                              unoptimized
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-black text-white/40">
+                              {msg.username?.[0]?.toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          className={`flex flex-col ${msg.username === user?.username ? 'items-end' : 'items-start'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-[10px] font-black tracking-tighter uppercase ${
+                                msg.username === room?.host?.username
+                                  ? 'text-[#C800DF]'
+                                  : 'text-white/40'
+                              }`}
+                            >
+                              {msg.username}
+                              {msg.username === user?.username && ' (Bạn)'}
+                            </span>
+                          </div>
+                          <p
+                            className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${
+                              msg.username === user?.username
+                                ? 'rounded-2xl rounded-tr-none border border-[#C800DF]/20 bg-[#C800DF]/20 text-white shadow-[0_0_10px_rgba(200,0,223,0.1)]'
+                                : 'text-white/90'
+                            }`}
+                          >
+                            {msg.message}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </React.Fragment>
+                ))}
+            </div>
+          )}
 
           {/* Floating Emojis Layer */}
           <div className="pointer-events-none absolute top-32 right-0 bottom-32 left-0 overflow-hidden">
             <AnimatePresence>
               {emojis.map((e) => (
                 <motion.div
-                  key={e.id}
+                  key={e.localId}
                   initial={{ opacity: 1, y: 100, x: `${e.x}%`, scale: 0.5 }}
                   animate={{ opacity: 0, y: -100, x: `${e.x}%`, scale: 1.5 }}
-                  transition={{ duration: 2, ease: 'easeOut' }}
+                  transition={{ duration: 4.5, ease: 'easeOut' }}
                   className="absolute bottom-0 text-2xl"
                 >
                   {e.emoji}
@@ -779,6 +836,53 @@ export default function CommunityRoomPage({
           </div>
         </div>
       </div>
+      {/* Leave Confirmation Modal */}
+      <AnimatePresence>
+        {isLeaveModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsLeaveModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="glass relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-[#121214] p-8 shadow-2xl"
+            >
+              <div className="mb-6 flex justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                  <LogOut size={32} />
+                </div>
+              </div>
+              <h3 className="mb-2 text-center text-xl font-bold text-white">
+                Rời khỏi phòng?
+              </h3>
+              <p className="mb-8 text-center text-sm leading-relaxed text-white/60">
+                Bạn có chắc chắn muốn rời khỏi phòng này? Các thông tin của bạn
+                sẽ được xóa ngay lập tức.
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => router.push('/rooms')}
+                  className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
+                >
+                  Xác nhận rời phòng
+                </button>
+                <button
+                  onClick={() => setIsLeaveModalOpen(false)}
+                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Ở lại
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

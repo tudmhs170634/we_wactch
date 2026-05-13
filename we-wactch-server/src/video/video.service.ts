@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../upload/s3.service';
@@ -17,6 +18,7 @@ const VIDEO_TTL = 60; // 60 giây
 
 @Injectable()
 export class VideoService {
+  private readonly logger = new Logger(VideoService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
@@ -47,39 +49,44 @@ export class VideoService {
   }
 
   async findAll(page = 1, limit = 12, search?: string) {
-    const cacheKey = search ? null : VIDEO_LIST_KEY(page, limit);
+    try {
+      const cacheKey = search ? null : VIDEO_LIST_KEY(page, limit);
 
-    if (cacheKey) {
-      const cached = await this.redis.get(cacheKey);
-      if (cached) return cached;
+      if (cacheKey) {
+        const cached = await this.redis.get(cacheKey);
+        if (cached) return cached;
+      }
+
+      const skip = (page - 1) * limit;
+      const where = search
+        ? {
+            title: { contains: search, mode: 'insensitive' as const },
+            isActive: true,
+          }
+        : { isActive: true };
+
+      const [videos, total] = await Promise.all([
+        this.prisma.video.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            owner: { select: { id: true, username: true, avatarUrl: true } },
+          },
+        }),
+        this.prisma.video.count({ where }),
+      ]);
+
+      const result = { videos, total, page, limit };
+      if (cacheKey) {
+        await this.redis.set(cacheKey, result, VIDEO_TTL);
+      }
+      return result;
+    } catch (error: any) {
+      this.logger.error(`FindAll videos error: ${error.message}`, error.stack);
+      throw error;
     }
-
-    const skip = (page - 1) * limit;
-    const where = search
-      ? {
-          title: { contains: search, mode: 'insensitive' as const },
-          isActive: true,
-        }
-      : { isActive: true };
-
-    const [videos, total] = await Promise.all([
-      this.prisma.video.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          owner: { select: { id: true, username: true, avatarUrl: true } },
-        },
-      }),
-      this.prisma.video.count({ where }),
-    ]);
-
-    const result = { videos, total, page, limit };
-    if (cacheKey) {
-      await this.redis.set(cacheKey, result, VIDEO_TTL);
-    }
-    return result;
   }
 
   async findAllAdmin(page = 1, limit = 50, search?: string) {

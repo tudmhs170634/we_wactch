@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Router from 'next/router';
 import {
   Mail,
   Lock,
@@ -33,19 +34,23 @@ const AuthForm: React.FC<AuthFormProps> = ({
   const { login: setAuth, isAuthenticated } = useAuthStore();
 
   React.useEffect(() => {
-    // Xử lý trường hợp Zustand hydrate xong và user đã đăng nhập sẵn
+    // Xử lý trường hợp đã đăng nhập sẵn
     if (isAuthenticated) {
-      window.location.href = callbackUrl || '/';
+      // Ưu tiên lấy từ URL, nếu không có thì mặc định về Home
+      const target = callbackUrl || '/';
+
+      // Nếu đã ở đúng target (hoặc đang ở login mà target là login) thì không redirect vòng lặp
+      if (window.location.pathname !== target) {
+        window.location.href = target;
+      }
     }
-    // Chỉ chạy 1 lần sau khi hydrate xong
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, [isAuthenticated, callbackUrl]);
 
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState('test@test.com');
-  const [password, setPassword] = useState('123456789');
+  const [email, setEmail] = useState('user@gmail.com');
+  const [password, setPassword] = useState('123456');
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(AVATARS[0]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -96,7 +101,7 @@ const AuthForm: React.FC<AuthFormProps> = ({
 
         const destination =
           res.user.role === 'admin' ? '/admin' : callbackUrl || '/';
-        window.location.href = destination;
+        router.push(destination);
       } else {
         const res = await register({ email, username, password, avatarUrl });
         console.log('Register response:', res);

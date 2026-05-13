@@ -17,12 +17,16 @@ import {
   Loader2,
   Check,
   X,
+  Users,
+  Globe,
 } from 'lucide-react';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import { UserResponse } from '@/src/types/auth';
 import { uploadImage, updateProfile } from '@/src/services/auth';
 import { compressImage } from '@/src/lib/imageUtils';
+import { getRooms, Room } from '@/src/services/room';
 import { toast } from 'sonner';
+import Link from 'next/link';
 
 const ProfilePage = () => {
   const {
@@ -42,7 +46,32 @@ const ProfilePage = () => {
     avatarPublicId: '',
   });
 
+  const [userRooms, setUserRooms] = useState<Room[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchUserRooms = React.useCallback(async () => {
+    if (!realUser?.id) return;
+    setRoomsLoading(true);
+    try {
+      const res = await getRooms(1, 50, undefined, realUser.id, false);
+      // Sắp xếp: Active lên đầu
+      const sorted = (res.rooms || []).sort((a: any, b: any) => {
+        if (a.isActive === b.isActive) return 0;
+        return a.isActive ? -1 : 1;
+      });
+      setUserRooms(sorted);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRoomsLoading(false);
+    }
+  }, [realUser?.id]);
+
+  React.useEffect(() => {
+    fetchUserRooms();
+  }, [fetchUserRooms]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,7 +118,7 @@ const ProfilePage = () => {
         avatarUrl: updatedUser.avatarUrl || '',
         avatarPublicId: '',
       });
-      
+
       setIsEditing(false);
       toast.success('Cập nhật hồ sơ thành công!');
     } catch (error: any) {
@@ -233,13 +262,84 @@ const ProfilePage = () => {
 
           {/* Stats / Activity Area */}
           <div className="col-span-1 flex flex-col gap-6 md:col-span-2">
-            <div className="glass flex flex-1 items-center justify-center rounded-[40px] border border-white/10 bg-black/40 p-10 backdrop-blur-xl">
-              <div className="text-center">
-                <Award size={48} className="mx-auto mb-4 text-white/20" />
-                <p className="text-sm font-bold tracking-widest text-white/30 uppercase">
-                  Chưa có hoạt động nào
-                </p>
+            <div className="glass flex flex-1 flex-col rounded-[40px] border border-white/10 bg-black/40 p-8 backdrop-blur-xl md:p-10">
+              <div className="mb-8 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-white">Phòng đã tạo</h2>
+                <div className="flex items-center gap-2 text-xs font-medium text-white/40">
+                  <Clock size={14} />
+                  <span>Cập nhật mới nhất</span>
+                </div>
               </div>
+
+              {roomsLoading ? (
+                <div className="flex h-40 items-center justify-center">
+                  <Loader2 className="text-primary h-8 w-8 animate-spin" />
+                </div>
+              ) : userRooms.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {userRooms.map((room) => (
+                    <Link
+                      key={room.id}
+                      href={room.isActive ? `/community/${room.slug}` : '#'}
+                      className={`group relative overflow-hidden rounded-3xl border border-white/10 p-5 transition-all ${
+                        room.isActive
+                          ? 'hover:border-primary/30 bg-white/5 hover:bg-white/10'
+                          : 'bg-black/20 opacity-60 grayscale'
+                      }`}
+                    >
+                      <div className="mb-4 flex items-center justify-between">
+                        <div
+                          className={`flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black tracking-widest uppercase ${
+                            room.isActive
+                              ? 'bg-primary/20 text-primary'
+                              : 'bg-white/10 text-white/40'
+                          }`}
+                        >
+                          {room.isActive && (
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="bg-primary absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"></span>
+                              <span className="bg-primary relative inline-flex h-1.5 w-1.5 rounded-full"></span>
+                            </span>
+                          )}
+                          {room.isActive ? 'Đang hoạt động' : 'Đã kết thúc'}
+                        </div>
+                        <span className="text-[10px] font-bold text-white/30">
+                          {new Date(room.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      <h3 className="group-hover:text-primary mb-2 line-clamp-1 font-bold text-white transition-colors">
+                        {room.title}
+                      </h3>
+
+                      <div className="flex items-center gap-4 text-xs text-white/40">
+                        <div className="flex items-center gap-1.5">
+                          <Users size={12} />
+                          <span>Max: {room.maxUsers}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {room.type === 'public' ? (
+                            <Globe size={12} />
+                          ) : (
+                            <Shield size={12} />
+                          )}
+                          <span className="capitalize">{room.type}</span>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-20 text-center">
+                  <Award size={48} className="mx-auto mb-4 text-white/20" />
+                  <p className="text-sm font-bold tracking-widest text-white/30 uppercase">
+                    Chưa có hoạt động nào
+                  </p>
+                  <p className="mt-2 text-xs text-white/20">
+                    Hãy tạo phòng đầu tiên để bắt đầu trải nghiệm cùng bạn bè.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </motion.div>

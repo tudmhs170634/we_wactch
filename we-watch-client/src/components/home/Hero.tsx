@@ -107,16 +107,12 @@ const Hero = () => {
         className="mx-auto mt-20 grid w-full max-w-6xl grid-cols-1 gap-8 px-4 md:grid-cols-2"
       >
         {/* Option 1: We Watch (Private) */}
-        <div
-          onClick={handleCreateRoomClick}
-          className="group relative cursor-pointer overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/40 p-10 shadow-2xl backdrop-blur-2xl transition-all hover:border-[#C800DF]/50 hover:bg-black/60"
-        >
+        <div className="group relative cursor-pointer overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/40 p-10 shadow-2xl backdrop-blur-2xl transition-all hover:border-[#C800DF]/50 hover:bg-black/60">
+          {/* Blur background */}
           <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-[#C800DF]/10 blur-[100px] transition-opacity group-hover:opacity-100" />
 
           <div className="relative z-10 flex flex-col items-start text-left">
-            <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#C800DF]/20 text-[#C800DF]">
-              <Shield size={28} />
-            </div>
+            {/* removed icon div */}
             <h3 className="text-3xl font-[950] tracking-tighter text-white uppercase">
               Phòng Riêng Tư
             </h3>
@@ -135,27 +131,16 @@ const Hero = () => {
                 </span>
               ))}
             </div>
-
-            <div className="group/btn mt-12 flex items-center gap-4 text-[13px] font-black tracking-widest text-white uppercase">
-              Bắt đầu ngay
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 transition-all group-hover/btn:translate-x-2 group-hover/btn:bg-[#C800DF]">
-                <Plus size={18} />
-              </div>
-            </div>
           </div>
         </div>
 
         {/* Option 2: Community (Live) */}
-        <div
-          onClick={handleCreateRoomClick}
-          className="group relative cursor-pointer overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/40 p-10 shadow-2xl backdrop-blur-2xl transition-all hover:border-white/30 hover:bg-black/60"
-        >
+        <div className="group relative cursor-pointer overflow-hidden rounded-[2.5rem] border border-white/10 bg-black/40 p-10 shadow-2xl backdrop-blur-2xl transition-all hover:border-white/30 hover:bg-black/60">
+          {/* Blur background */}
           <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-white/5 blur-[100px] transition-opacity group-hover:opacity-100" />
 
           <div className="relative z-10 flex flex-col items-start text-left">
-            <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-white">
-              <Users size={28} />
-            </div>
+            {/* removed icon div */}
             <h3 className="text-3xl font-[950] tracking-tighter text-white uppercase">
               Phòng Cộng Đồng
             </h3>
@@ -173,13 +158,6 @@ const Hero = () => {
                   {tag}
                 </span>
               ))}
-            </div>
-
-            <div className="group/btn mt-12 flex items-center gap-4 text-[13px] font-black tracking-widest text-white uppercase">
-              Khám phá phòng live
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 transition-all group-hover/btn:translate-x-2 group-hover/btn:bg-white group-hover/btn:text-black">
-                <ArrowRight size={18} />
-              </div>
             </div>
           </div>
         </div>

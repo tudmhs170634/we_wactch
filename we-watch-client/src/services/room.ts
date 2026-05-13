@@ -3,12 +3,16 @@ import api from '../lib/axios';
 export interface Room {
   id: string;
   title: string;
+  slug: string;
   type: 'public' | 'private';
   hostId: string;
   videoId?: string;
   image?: string | null;
+  isActive: boolean;
+  maxUsers: number;
   createdAt: string;
   host?: {
+    id: string;
     username: string;
     avatarUrl?: string;
   };

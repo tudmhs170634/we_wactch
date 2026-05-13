@@ -28,13 +28,11 @@ api.interceptors.response.use(
       'An unexpected error occurred';
 
     if (error.response?.status === 401) {
-      toast.error('Session expired. Please log in again.');
+      toast.error('Session expired. Please log in again.', { id: 'session-expired' });
       useAuthStore.getState().logout();
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
-    } else {
-      toast.error(message);
     }
     
     return Promise.reject(error);

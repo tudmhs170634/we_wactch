@@ -74,8 +74,6 @@ export default function CreateRoomModal({
   const pickerRef = useRef<HTMLDivElement>(null);
 
   const [roomName, setRoomName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [customSlug, setCustomSlug] = useState(false);
 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -92,16 +90,6 @@ export default function CreateRoomModal({
 
   const [maxUsers, setMaxUsers] = useState(5);
 
-  useEffect(() => {
-    if (!customSlug) {
-      setSlug(
-        roomName
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/(^-|-$)+/g, '')
-      );
-    }
-  }, [roomName, customSlug]);
 
   // Sync default video when props change (e.g. opened from video card)
   useEffect(() => {
@@ -176,10 +164,8 @@ export default function CreateRoomModal({
       window.location.href = `/${route}/${room.id}`;
     } catch (err: any) {
       console.error('Create room error:', err);
-      toast.error(
-        err.response?.data?.message ||
-          'Tạo phòng thất bại. Vui lòng đăng nhập lại.'
-      );
+      const message = err.response?.data?.message || 'Tạo phòng thất bại. Vui lòng đăng nhập lại.';
+      toast.error(message, { id: 'create-room-error' });
     } finally {
       setLoading(false);
     }
@@ -221,7 +207,10 @@ export default function CreateRoomModal({
               We Watch
             </button>
             <button
-              onClick={() => setTab('public')}
+              onClick={() => {
+                setTab('public');
+                setSelectedVideo(null);
+              }}
               className={`flex h-full flex-1 items-center justify-center gap-2 font-bold transition-all ${
                 tab === 'public'
                   ? 'text-primary border-b-2 border-[#C800DF] bg-white/5'
@@ -249,31 +238,6 @@ export default function CreateRoomModal({
                 className="w-full rounded-[16px] border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white outline-none focus:border-[#C800DF]/50"
                 required
               />
-              <div className="mt-1 flex items-center justify-between">
-                <span className="text-xs text-white/40">
-                  wewatch.app/{tab === 'private' ? 'p' : 'community'}/
-                  <span className="text-white/80">{slug || '...'}</span>
-                </span>
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-white/60 transition-colors hover:text-white">
-                  <input
-                    type="checkbox"
-                    checked={customSlug}
-                    onChange={(e) => setCustomSlug(e.target.checked)}
-                    className="accent-[#C800DF]"
-                  />
-                  Tùy chỉnh đường dẫn
-                </label>
-              </div>
-              {customSlug && (
-                <input
-                  type="text"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  placeholder="custom-slug"
-                  className="mt-2 w-full rounded-[16px] border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white outline-none focus:border-[#C800DF]/50"
-                  required
-                />
-              )}
             </div>
 
             {tab === 'private' && (
@@ -301,127 +265,128 @@ export default function CreateRoomModal({
               </div>
             )}
 
-            {/* Video Picker */}
-            <div className="flex flex-col gap-2" ref={pickerRef}>
-              <label className="text-sm font-bold text-white/80">
-                Video chiếu{' '}
-                <span className="font-normal text-white/30">(tùy chọn)</span>
-              </label>
-              {selectedVideo ? (
-                <div className="flex items-center gap-3 rounded-[16px] border border-[#C800DF]/30 bg-[#C800DF]/5 px-4 py-2.5">
-                  {selectedVideo.thumbnailUrl ? (
-                    <div className="relative h-9 w-14 shrink-0 overflow-hidden rounded-lg">
-                      <Image
-                        src={selectedVideo.thumbnailUrl}
-                        alt={selectedVideo.title}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <Film className="h-5 w-5 text-[#C800DF]" />
-                  )}
-                  <span className="line-clamp-1 flex-1 text-sm font-bold text-white">
-                    {selectedVideo.title}
-                  </span>
+            {/* Video Picker - Only for Private Rooms */}
+            {tab === 'private' && (
+              <div className="flex flex-col gap-2" ref={pickerRef}>
+                <label className="text-sm font-bold text-white/80">
+                  Video chiếu{' '}
+                  <span className="font-normal text-white/30">(tùy chọn)</span>
+                </label>
+                {selectedVideo ? (
+                  <div className="flex items-center gap-3 rounded-[16px] border border-[#C800DF]/30 bg-[#C800DF]/5 px-4 py-2.5">
+                    {selectedVideo.thumbnailUrl ? (
+                      <div className="relative h-9 w-14 shrink-0 overflow-hidden rounded-lg">
+                        <Image
+                          src={selectedVideo.thumbnailUrl}
+                          alt={selectedVideo.title}
+                          fill
+                          className="object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <Film className="h-5 w-5 text-[#C800DF]" />
+                    )}
+                    <span className="line-clamp-1 flex-1 text-sm font-bold text-white">
+                      {selectedVideo.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVideo(null)}
+                      className="text-white/40 hover:text-white"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => setSelectedVideo(null)}
-                    className="text-white/40 hover:text-white"
+                    onClick={() => setVideoPickerOpen((v) => !v)}
+                    className="flex items-center gap-2 rounded-[16px] border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/50 transition-colors hover:bg-white/10 hover:text-white"
                   >
-                    <X size={16} />
+                    <Film size={16} />
+                    Chọn video...
                   </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setVideoPickerOpen((v) => !v)}
-                  className="flex items-center gap-2 rounded-[16px] border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/50 transition-colors hover:bg-white/10 hover:text-white"
-                >
-                  <Film size={16} />
-                  Chọn video...
-                </button>
-              )}
+                )}
 
-              <AnimatePresence>
-                {videoPickerOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    className="z-50 max-h-56 overflow-hidden rounded-[16px] border border-white/10 bg-[#12121A] shadow-2xl"
-                  >
-                    <div className="sticky top-0 flex items-center gap-2 border-b border-white/10 bg-[#12121A] px-3 py-2">
-                      <Search size={14} className="text-white/40" />
-                      <input
-                        autoFocus
-                        value={videoSearch}
-                        onChange={(e) => setVideoSearch(e.target.value)}
-                        placeholder="Tìm video..."
-                        className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
-                      />
-                    </div>
-                    <div className="scrollbar-hide max-h-40 overflow-y-auto">
-                      {videoLoading ? (
-                        <p className="px-4 py-3 text-xs text-white/30">
-                          Đang tải video…
-                        </p>
-                      ) : (
-                        <>
-                          {videoList
-                            .filter((v) =>
+                <AnimatePresence>
+                  {videoPickerOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      className="z-50 max-h-56 overflow-hidden rounded-[16px] border border-white/10 bg-[#12121A] shadow-2xl"
+                    >
+                      <div className="sticky top-0 flex items-center gap-2 border-b border-white/10 bg-[#12121A] px-3 py-2">
+                        <Search size={14} className="text-white/40" />
+                        <input
+                          autoFocus
+                          value={videoSearch}
+                          onChange={(e) => setVideoSearch(e.target.value)}
+                          placeholder="Tìm video..."
+                          className="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none"
+                        />
+                      </div>
+                      <div className="scrollbar-hide max-h-40 overflow-y-auto">
+                        {videoLoading ? (
+                          <p className="px-4 py-3 text-xs text-white/30">
+                            Đang tải video…
+                          </p>
+                        ) : (
+                          <>
+                            {videoList
+                              .filter((v) =>
+                                v.title
+                                  .toLowerCase()
+                                  .includes(videoSearch.toLowerCase())
+                              )
+                              .map((v) => (
+                                <button
+                                  key={v.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVideo(v);
+                                    setVideoPickerOpen(false);
+                                    setVideoSearch('');
+                                  }}
+                                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+                                >
+                                  {v.thumbnailUrl ? (
+                                    <div className="relative h-8 w-12 shrink-0 overflow-hidden rounded-md">
+                                      <Image
+                                        src={v.thumbnailUrl}
+                                        alt={v.title}
+                                        fill
+                                        className="object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <Film size={16} className="text-white/30" />
+                                  )}
+                                  <span className="line-clamp-1 flex-1 text-sm font-medium text-white">
+                                    {v.title}
+                                  </span>
+                                  {selectedVideo?.id === v.id && (
+                                    <Check size={14} className="text-[#C800DF]" />
+                                  )}
+                                </button>
+                              ))}
+                            {videoList.filter((v) =>
                               v.title
                                 .toLowerCase()
                                 .includes(videoSearch.toLowerCase())
-                            )
-                            .map((v) => (
-                              <button
-                                key={v.id}
-                                type="button"
-                                onClick={() => {
-                                  setSelectedVideo(v);
-                                  setVideoPickerOpen(false);
-                                  setVideoSearch('');
-                                }}
-                                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-white/5"
-                              >
-                                {v.thumbnailUrl ? (
-                                  <div className="relative h-8 w-12 shrink-0 overflow-hidden rounded-md">
-                                    <Image
-                                      src={v.thumbnailUrl}
-                                      alt={v.title}
-                                      fill
-                                      className="object-cover"
-                                    />
-                                  </div>
-                                ) : (
-                                  <Film size={16} className="text-white/30" />
-                                )}
-                                <span className="line-clamp-1 flex-1 text-sm font-medium text-white">
-                                  {v.title}
-                                </span>
-                                {selectedVideo?.id === v.id && (
-                                  <Check size={14} className="text-[#C800DF]" />
-                                )}
-                              </button>
-                            ))}
-                          {videoList.filter((v) =>
-                            v.title
-                              .toLowerCase()
-                              .includes(videoSearch.toLowerCase())
-                          ).length === 0 && (
-                            <p className="px-4 py-3 text-xs text-white/30">
-                              Không tìm thấy video.
-                            </p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
+                            ).length === 0 && (
+                              <p className="px-4 py-3 text-xs text-white/30">
+                                Không tìm thấy video.
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-bold text-white/80">Banner</label>
               <div className="flex gap-2">

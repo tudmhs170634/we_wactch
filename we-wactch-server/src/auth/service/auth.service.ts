@@ -57,6 +57,7 @@ export class AuthService {
       accessToken: this.jwt.sign({
         sub: user.id,
         email: user.email,
+        username: user.username,
         role: user.role,
       }),
       user: userWithoutPassword,
@@ -84,6 +85,7 @@ export class AuthService {
       accessToken: this.jwt.sign({
         sub: user.id,
         email: user.email,
+        username: user.username,
         role: user.role,
       }),
       user: userWithoutPassword,
@@ -127,6 +129,7 @@ export class AuthService {
     const newToken = this.jwt.sign({
       sub: user.id,
       email: user.email,
+      username: user.username,
       role: user.role,
     });
 
