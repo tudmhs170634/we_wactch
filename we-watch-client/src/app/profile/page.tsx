@@ -55,9 +55,12 @@ const ProfilePage = () => {
     if (!realUser?.id) return;
     setRoomsLoading(true);
     try {
-      const res = await getRooms(1, 50, undefined, realUser.id, false);
+      const res = await getRooms(1, 100);
+      const filteredRooms = (res.rooms || []).filter(
+        (r: any) => r.hostId === realUser.id || r.host?.id === realUser.id
+      );
       // Sắp xếp: Active lên đầu
-      const sorted = (res.rooms || []).sort((a: any, b: any) => {
+      const sorted = filteredRooms.sort((a: any, b: any) => {
         if (a.isActive === b.isActive) return 0;
         return a.isActive ? -1 : 1;
       });

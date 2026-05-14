@@ -9,6 +9,7 @@ import {
   LogOut,
   TrendingUp,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export type TabType =
   | 'dashboard'
@@ -30,6 +31,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   setSelectedMovie,
   onLogout,
 }) => {
+  const router = useRouter();
+  
   const menuItems = [
     { id: 'dashboard', label: 'Bảng điều khiển', icon: LayoutDashboard },
     { id: 'users', label: 'Người dùng', icon: Users },
@@ -40,7 +43,10 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div className="fixed top-0 left-0 h-screen w-64 border border-r border-white/5 border-white/10 bg-[#111113] px-6 py-8">
-      <div className="mb-12 flex items-center gap-3 px-2">
+      <div
+        onClick={() => router.push('/')}
+        className="mb-12 flex cursor-pointer items-center gap-3 px-2"
+      >
         <div className="bg-primary shadow-primary/20 flex h-10 w-10 items-center justify-center rounded-full text-white shadow-lg">
           <TrendingUp size={24} />
         </div>

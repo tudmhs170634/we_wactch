@@ -53,7 +53,12 @@ export interface VideoActionEvent {
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
 
-export const useSocket = (roomId?: string, user?: any, password?: string) => {
+export const useSocket = (
+  roomId?: string,
+  user?: any,
+  password?: string,
+  onRoomEnded?: () => void
+) => {
   const socketRef = useRef<Socket | null>(null);
 
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -113,6 +118,11 @@ export const useSocket = (roomId?: string, user?: any, password?: string) => {
 
     socket.on('userLeft', (username: string) => {
       setMembers((prev) => prev.filter((m) => m.username !== username));
+    });
+
+    // Lắng nghe khi host kết thúc phòng
+    socket.on('roomEnded', () => {
+      onRoomEnded?.();
     });
 
     // ── Chat ─────────────────────────────────────────────────────────────────

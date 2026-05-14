@@ -1,0 +1,23 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - client-server # Tự động deploy khi push vào branch này
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/we_wactch
+            git fetch origin client-server
+            git reset --hard origin/client-server
+            docker compose up -d --build
+            docker system prune -f
