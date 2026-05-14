@@ -63,12 +63,14 @@ export default function WeWatchRoomPage({
   const [isCopied, setIsCopied] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const isRoomEnded = useRef(false);
+  const [isHostCamOn, setIsHostCamOn] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [visibleStatusIds, setVisibleStatusIds] = useState<Set<string>>(
     new Set()
   );
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [selectedQueueVideo, setSelectedQueueVideo] = useState<any>(null);
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   const [room, setRoom] = useState<any>(null);
@@ -91,6 +93,7 @@ export default function WeWatchRoomPage({
     sendEmoji,
     addVideoToWishlist,
     removeVideoFromWishlist,
+    playVideoFromWishlist,
     socketError,
     currentHostId,
     setCurrentHostId,
@@ -99,6 +102,9 @@ export default function WeWatchRoomPage({
     videoChangeTrigger,
     videoState,
     requestVideoSync,
+    deleteMessage,
+    muteChatUser,
+    unmuteChatUser,
   } = useSocket(room?.id, user, password, (reason?: string, stoppedBy?: string, stoppedByRole?: string) => {
     isRoomEnded.current = true;
     const amIHost = room?.host?.username === user?.username;
@@ -548,7 +554,7 @@ export default function WeWatchRoomPage({
         <div className="flex flex-1 gap-4 overflow-hidden p-4">
           {/* LEFT SIDEBAR */}
           <div className="flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden">
-            {/* List Video */}
+            {/* Thư viện video */}
             <div
               className={`glass flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5 transition-all duration-300 ${isFilmsOpen ? 'flex-1' : 'h-fit flex-none'}`}
             >
@@ -852,30 +858,56 @@ export default function WeWatchRoomPage({
             </div>
           </div>
 
+          {/* Floating Emojis Layer */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+            <AnimatePresence>
+              {emojis.map((e) => (
+                <motion.div
+                  key={e.localId}
+                  initial={{ opacity: 1, y: 80, x: `${e.x}%`, scale: 0.5 }}
+                  animate={{ opacity: 0, y: -100, x: `${e.x}%`, scale: 1.8 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 4.5, ease: 'easeOut' }}
+                  className="absolute bottom-16 text-2xl"
+                >
+                  {e.emoji}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
           {/* RIGHT SIDEBAR: Participants & Chat */}
           <div className="glass relative flex w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
-            {/* Participants Header (Collapsible) */}
-            <div
-              className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 transition-colors hover:bg-white/5"
-              onClick={() => setIsParticipantsOpen(!isParticipantsOpen)}
-            >
-              <div className="flex flex-col">
-                <span className="text-sm font-bold tracking-tighter text-white uppercase">
-                  Đang nghe
+            {!room ? (
+              <div className="flex flex-1 flex-col items-center justify-center opacity-40">
+                <Loader2 className="animate-spin text-[#C800DF]" size={24} />
+                <span className="mt-3 text-xs font-black tracking-widest uppercase">
+                  Đang tải dữ liệu...
                 </span>
-                <div className="flex items-center gap-1.5 text-xs text-green-400">
-                  <div className="h-1.5 w-1.5 rounded-full bg-green-400"></div>
-                  {socketMembers.length} online
+              </div>
+            ) : (
+              <>
+                <div
+                  className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 transition-colors hover:bg-white/5"
+                  onClick={() => setIsParticipantsOpen(!isParticipantsOpen)}
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold tracking-tighter text-white uppercase">
+                      Đang nghe
+                    </span>
+                    <div className="flex items-center gap-1.5 text-xs text-green-400">
+                      <div className="h-1.5 w-1.5 rounded-full bg-green-400"></div>
+                      {socketMembers.length} online
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 p-1 text-white/60">
+                    {isParticipantsOpen ? (
+                      <ChevronUp size={16} />
+                    ) : (
+                      <ChevronDown size={16} />
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="rounded-lg border border-white/10 p-1 text-white/60">
-                {isParticipantsOpen ? (
-                  <ChevronUp size={16} />
-                ) : (
-                  <ChevronDown size={16} />
-                )}
-              </div>
-            </div>
 
             <AnimatePresence initial={false}>
               {isParticipantsOpen && (
@@ -1213,158 +1245,294 @@ export default function WeWatchRoomPage({
                 </div>
               </form>
             </div>
-          </div>
-        </div>
-        {/* Leave Confirmation Modal */}
-        <AnimatePresence>
-          {isLeaveModalOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsLeaveModalOpen(false)}
-                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="glass relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-[#121214] p-8 shadow-2xl"
-              >
-                <div className="mb-6 flex justify-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
-                    <LogOut size={32} />
-                  </div>
-                </div>
-                <h3 className="mb-2 text-center text-xl font-bold text-white">
-                  Rời khỏi phòng?
-                </h3>
-                <p className="mb-8 text-center text-sm leading-relaxed text-white/60">
-                  Bạn có chắc chắn muốn rời khỏi phòng này? Các thông tin của bạn
-                  sẽ được xóa ngay lập tức.
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => router.push('/rooms')}
-                    className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
-                  >
-                    Xác nhận rời phòng
-                  </button>
-                  <button
-                    onClick={() => setIsLeaveModalOpen(false)}
-                    className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
-                  >
-                    Ở lại
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+          </>
+        )}
+      </div>
+    </div>
 
-        {/* End Room Reason Modal (Admin) */}
-        <AnimatePresence>
-          {isEndRoomModalOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setIsEndRoomModalOpen(false)}
-                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="glass relative w-full max-w-md overflow-hidden rounded-[32px] border border-red-500/30 bg-[#121214] p-8 shadow-2xl shadow-red-900/20"
-              >
-                <h3 className="mb-2 text-center text-xl font-bold text-white">
-                  Dừng phiên live
-                </h3>
-                <p className="mb-6 text-center text-sm leading-relaxed text-white/60">
-                  Vui lòng chọn lý do dừng phiên live. Người xem sẽ bị đưa ra ngoài ngay lập tức.
-                </p>
-                <div className="mb-6 flex flex-col gap-2">
-                  {[
-                    'Vi phạm bản quyền',
-                    'Nội dung bạo lực, máu me, đánh nhau',
-                    'Nội dung 18+',
-                    'Livestream cờ bạc, cá độ',
-                    'Chửi bới cực đoan',
-                    'Lý do khác'
-                  ].map((reason) => (
-                    <label
-                      key={reason}
-                      className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all ${endRoomReason === reason
-                          ? 'border-red-500 bg-red-500/10'
-                          : 'border-white/10 bg-white/5 hover:bg-white/10'
-                        }`}
-                    >
-                      <span className="text-sm text-white/90">{reason}</span>
-                      <input
-                        type="radio"
-                        name="endRoomReason"
-                        value={reason}
-                        checked={endRoomReason === reason}
-                        onChange={(e) => setEndRoomReason(e.target.value)}
-                        className="hidden"
-                      />
-                    </label>
-                  ))}
-                </div>
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={confirmEndRoomAsAdmin}
-                    className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
-                  >
-                    Xác nhận dừng phiên live
-                  </button>
-                  <button
-                    onClick={() => setIsEndRoomModalOpen(false)}
-                    className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
-                  >
-                    Hủy
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-        {/* Image Viewer Modal */}
-        <AnimatePresence>
-          {selectedImage && (
-            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-10">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setSelectedImage(null)}
-                className="absolute inset-0 bg-black/90 backdrop-blur-md"
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="relative z-[210] max-h-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 shadow-2xl"
-              >
-                <button
-                  onClick={() => setSelectedImage(null)}
-                  className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/80"
-                >
-                  <X size={20} />
-                </button>
-                <img
-                  src={selectedImage}
-                  alt="Enlarged view"
-                  className="max-h-[85vh] w-full object-contain"
+    {/* Queue Video Confirmation Popup */}
+      <AnimatePresence>
+        {selectedQueueVideo && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setSelectedQueueVideo(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[#1A1A1D] shadow-2xl"
+            >
+              {/* Thumbnail */}
+              <div className="relative aspect-video w-full overflow-hidden">
+                <Image
+                  src={selectedQueueVideo.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
+                  alt={selectedQueueVideo.title}
+                  fill
+                  unoptimized
+                  className="object-cover"
                 />
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-      </main>
+                <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A1D] via-transparent to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <h3 className="line-clamp-2 text-sm font-bold text-white">
+                    {selectedQueueVideo.title}
+                  </h3>
+                  <p className="mt-1 text-[11px] text-white/50">
+                    Thêm bởi: {selectedQueueVideo.addedBy}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2 p-4">
+                {isHost ? (
+                  <button
+                    onClick={() => {
+                      playVideoFromWishlist(selectedQueueVideo.id);
+                      setSelectedQueueVideo(null);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#C800DF] py-3 text-sm font-bold text-white transition-all hover:bg-[#a000b3] active:scale-95"
+                  >
+                    <Play size={16} fill="currentColor" />
+                    Phát ngay
+                  </button>
+                ) : (
+                  <p className="text-center text-xs text-white/40 italic">
+                    Chỉ chủ phòng mới có thể chuyển phim
+                  </p>
+                )}
+                <button
+                  onClick={() => setSelectedQueueVideo(null)}
+                  className="w-full rounded-xl bg-white/5 py-3 text-sm font-bold text-white/60 transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Image Viewer Modal */}
+
+
+      {/* Leave Confirmation Modal */}
+      <AnimatePresence>
+        {isLeaveModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsLeaveModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="glass relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-[#121214] p-8 shadow-2xl"
+            >
+              <div className="mb-6 flex justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                  <LogOut size={32} />
+                </div>
+              </div>
+              <h3 className="mb-2 text-center text-xl font-bold text-white">
+                Rời khỏi phòng?
+              </h3>
+              <p className="mb-8 text-center text-sm leading-relaxed text-white/60">
+                Bạn có chắc chắn muốn rời khỏi phòng này? Các thông tin của bạn
+                sẽ được xóa ngay lập tức.
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => router.push('/rooms')}
+                  className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
+                >
+                  Xác nhận rời phòng
+                </button>
+                <button
+                  onClick={() => setIsLeaveModalOpen(false)}
+                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Ở lại
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Queue Video Confirmation Popup */}
+      <AnimatePresence>
+        {selectedQueueVideo && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setSelectedQueueVideo(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[#1A1A1D] shadow-2xl"
+            >
+              {/* Thumbnail */}
+              <div className="relative aspect-video w-full overflow-hidden">
+                <Image
+                  src={selectedQueueVideo.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
+                  alt={selectedQueueVideo.title}
+                  fill
+                  unoptimized
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A1D] via-transparent to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <h3 className="line-clamp-2 text-sm font-bold text-white">
+                    {selectedQueueVideo.title}
+                  </h3>
+                  <p className="mt-1 text-[11px] text-white/50">
+                    Thêm bởi: {selectedQueueVideo.addedBy}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2 p-4">
+                {isHost ? (
+                  <button
+                    onClick={() => {
+                      playVideoFromWishlist(selectedQueueVideo.id);
+                      setSelectedQueueVideo(null);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#C800DF] py-3 text-sm font-bold text-white transition-all hover:bg-[#a000b3] active:scale-95"
+                  >
+                    <Play size={16} fill="currentColor" />
+                    Phát ngay
+                  </button>
+                ) : (
+                  <p className="text-center text-xs text-white/40 italic">
+                    Chỉ chủ phòng mới có thể chuyển phim
+                  </p>
+                )}
+                <button
+                  onClick={() => setSelectedQueueVideo(null)}
+                  className="w-full rounded-xl bg-white/5 py-3 text-sm font-bold text-white/60 transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* End Room Reason Modal (Admin) */}
+      <AnimatePresence>
+        {isEndRoomModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsEndRoomModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="glass relative w-full max-w-md overflow-hidden rounded-[32px] border border-red-500/30 bg-[#121214] p-8 shadow-2xl shadow-red-900/20"
+            >
+              <h3 className="mb-2 text-center text-xl font-bold text-white">
+                Dừng phiên live
+              </h3>
+              <p className="mb-6 text-center text-sm leading-relaxed text-white/60">
+                Vui lòng chọn lý do dừng phiên live. Người xem sẽ bị đưa ra ngoài ngay lập tức.
+              </p>
+              <div className="mb-6 flex flex-col gap-2">
+                {[
+                  'Vi phạm bản quyền',
+                  'Nội dung bạo lực, máu me, đánh nhau',
+                  'Nội dung 18+',
+                  'Livestream cờ bạc, cá độ',
+                  'Chửi bới cực đoan',
+                  'Lý do khác'
+                ].map((reason) => (
+                  <label
+                    key={reason}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all ${endRoomReason === reason
+                        ? 'border-red-500 bg-red-500/10'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                      }`}
+                  >
+                    <span className="text-sm text-white/90">{reason}</span>
+                    <input
+                      type="radio"
+                      name="endRoomReason"
+                      value={reason}
+                      checked={endRoomReason === reason}
+                      onChange={(e) => setEndRoomReason(e.target.value)}
+                      className="hidden"
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={confirmEndRoomAsAdmin}
+                  className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
+                >
+                  Xác nhận dừng phiên live
+                </button>
+                <button
+                  onClick={() => setIsEndRoomModalOpen(false)}
+                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Hủy
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Image Viewer Modal */}
+      <AnimatePresence>
+        {selectedImage && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-10">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedImage(null)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative z-[210] max-h-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 shadow-2xl"
+            >
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/80"
+              >
+                <X size={20} />
+              </button>
+              <img
+                src={selectedImage}
+                alt="Enlarged view"
+                className="max-h-[85vh] w-full object-contain"
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </main>
   );
 }
