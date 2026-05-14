@@ -3,8 +3,7 @@ name: Deploy to DigitalOcean
 on:
   push:
     branches:
-      - client-server # Tự động deploy khi push vào branch này
-
+      - client-server
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -12,12 +11,24 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
           script: |
+            export PATH=$PATH:/usr/local/bin
             cd ~/we_wactch
+
+            echo "--- Start Deploying ---"
+
+            # Cập nhật code mới nhất
             git fetch origin client-server
             git reset --hard origin/client-server
-            docker compose up -d --build
-            docker system prune -f
+
+            # Build và chạy Docker
+            # Thêm --remove-orphans để dọn dẹp các container cũ không còn dùng
+            docker compose up -d --build --remove-orphans
+
+            # Dọn dẹp các image rác để tránh đầy ổ cứng VPS
+            docker image prune -f
+
+            echo "--- Deployment Finished ---"

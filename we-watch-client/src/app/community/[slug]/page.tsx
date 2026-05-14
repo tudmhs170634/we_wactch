@@ -39,7 +39,10 @@ import {
   UserPlus,
   Loader2,
   RefreshCw,
+  FileImage,
+  X,
 } from 'lucide-react';
+import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -107,6 +110,31 @@ export default function CommunityRoomPage({
   const [timeOffset, setTimeOffset] = useState(0);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
+  // New Chat Feature States
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [gifSearch, setGifSearch] = useState('');
+  const [gifs, setGifs] = useState<any[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close pickers
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        chatContainerRef.current &&
+        !chatContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsEmojiPickerOpen(false);
+        setIsGifPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -130,9 +158,7 @@ export default function CommunityRoomPage({
 
   const viewers = useMemo(() => {
     if (!socketMembers) return [];
-    return socketMembers.filter(
-      (m) => m.username !== room?.host?.username
-    );
+    return socketMembers.filter((m) => m.username !== room?.host?.username);
   }, [socketMembers, room?.host?.username]);
 
   // Load room by slug
@@ -197,7 +223,6 @@ export default function CommunityRoomPage({
     }
   }, [room, user]);
 
-
   const handleLeaveRoom = () => {
     if (!room || !user) return;
     socket?.emit('leaveRoom', { roomId: room.id, username: user.username });
@@ -206,7 +231,12 @@ export default function CommunityRoomPage({
 
   const handleEndRoom = async () => {
     if (!room || !user) return;
-    if (!window.confirm('Bạn có chắc muốn kết thúc phòng? Tất cả người xem sẽ bị đưa ra ngoài.')) return;
+    if (
+      !window.confirm(
+        'Bạn có chắc muốn kết thúc phòng? Tất cả người xem sẽ bị đưa ra ngoài.'
+      )
+    )
+      return;
     try {
       // Notify tất cả người trong phòng trước
       socket?.emit('endRoom', { roomId: room.id });
@@ -229,6 +259,84 @@ export default function CommunityRoomPage({
 
   const spawnEmoji = (emoji: string) => {
     sendEmoji(emoji);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setIsUploading(true);
+    try {
+      const res = await api.post('/upload/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      if (res.data.url) {
+        sendMessage(res.data.url);
+      }
+    } catch (err) {
+      toast.error('Không thể tải ảnh lên. Vui lòng thử lại.');
+      console.error(err);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const fetchGifs = async (query = '') => {
+    try {
+      const apiKey = 'LIVDSRZULELA';
+      const provider = 'tenor';
+
+      let endpoint = '';
+      if (provider === 'tenor') {
+        endpoint = query
+          ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${apiKey}&limit=20`
+          : `https://tenor.googleapis.com/v2/featured?key=${apiKey}&limit=20`;
+      } else {
+        endpoint = query
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(query)}&limit=20&rating=g`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=20&rating=g`;
+      }
+
+      const res = await fetch(endpoint);
+      const data = await res.json();
+
+      let formattedGifs = [];
+      if (provider === 'tenor') {
+        formattedGifs = (data.results || []).map((g: any) => ({
+          id: g.id,
+          images: {
+            fixed_height_small: { url: g.media_formats.tinygif.url },
+            original: { url: g.media_formats.gif.url },
+          },
+        }));
+      } else {
+        formattedGifs = (data.data || []).map((g: any) => ({
+          id: g.id,
+          images: {
+            fixed_height_small: { url: g.images.fixed_height_small.url },
+            original: { url: g.images.original.url },
+          },
+        }));
+      }
+      setGifs(formattedGifs);
+    } catch (err) {
+      console.error('Fetch GIFs error:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isGifPickerOpen) {
+      fetchGifs(gifSearch);
+    }
+  }, [isGifPickerOpen, gifSearch]);
+
+  const onEmojiClick = (emojiData: any) => {
+    setChatInput((prev) => prev + emojiData.emoji);
+    setIsEmojiPickerOpen(false);
   };
 
   const handleSync = () => {
@@ -277,11 +385,18 @@ export default function CommunityRoomPage({
             <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
             <div className="flex flex-col items-start leading-tight">
               <span>
-                {isSyncing ? 'Đang đồng bộ...' : syncDone ? 'Đã đồng bộ!' : 'Đồng bộ với Host'}
+                {isSyncing
+                  ? 'Đang đồng bộ...'
+                  : syncDone
+                    ? 'Đã đồng bộ!'
+                    : 'Đồng bộ với Host'}
               </span>
               {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
-                <span className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}>
-                  Lệch: {timeOffset > 0 ? '+' : ''}{timeOffset.toFixed(1)}s
+                <span
+                  className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
+                >
+                  Lệch: {timeOffset > 0 ? '+' : ''}
+                  {timeOffset.toFixed(1)}s
                 </span>
               )}
             </div>
@@ -389,7 +504,7 @@ export default function CommunityRoomPage({
                         {isHost && m.username !== room?.host?.username && (
                           <button
                             onClick={() => handleKick(m.username)}
-                            className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125 animate-fade-in"
+                            className="animate-fade-in text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125"
                           >
                             <UserMinus size={14} />
                           </button>
@@ -513,7 +628,9 @@ export default function CommunityRoomPage({
               <VideoPlayer src={streamUrl} poster={room?.video?.thumbnailUrl} />
             ) : room?.video ? (
               <div className="flex h-full w-full animate-pulse items-center justify-center bg-white/5">
-                <span className="text-white/40 font-bold">Đang tải video...</span>
+                <span className="font-bold text-white/40">
+                  Đang tải video...
+                </span>
               </div>
             ) : (
               <Image
@@ -586,7 +703,9 @@ export default function CommunityRoomPage({
                   <Play size={40} fill="currentColor" className="ml-1" />
                 </div>
                 <div className="text-center">
-                  <h3 className="text-lg font-bold text-white">Chưa có video</h3>
+                  <h3 className="text-lg font-bold text-white">
+                    Chưa có video
+                  </h3>
                   <p className="text-sm text-white/40">
                     Vui lòng chọn phim từ thư viện để bắt đầu
                   </p>
@@ -754,15 +873,32 @@ export default function CommunityRoomPage({
                               {msg.username === user?.username && ' (Bạn)'}
                             </span>
                           </div>
-                          <p
+                          <div
                             className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${
                               msg.username === user?.username
                                 ? 'rounded-2xl rounded-tr-none border border-[#C800DF]/20 bg-[#C800DF]/20 text-white shadow-[0_0_10px_rgba(200,0,223,0.1)]'
                                 : 'text-white/90'
                             }`}
                           >
-                            {msg.message}
-                          </p>
+                            {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
+                            msg.message.includes('cloudinary.com') ||
+                            msg.message.includes('giphy.com') ||
+                            msg.message.includes('tenor.com') ? (
+                              <div
+                                className="relative mt-1 cursor-zoom-in overflow-hidden rounded-lg transition-opacity hover:opacity-90"
+                                onClick={() => setSelectedImage(msg.message)}
+                              >
+                                <img
+                                  src={msg.message}
+                                  alt="Chat media"
+                                  className="max-h-60 w-full object-contain"
+                                  loading="lazy"
+                                />
+                              </div>
+                            ) : (
+                              msg.message
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -789,7 +925,10 @@ export default function CommunityRoomPage({
           </div>
 
           {/* Chat Input & Reactions */}
-          <div className="border-t border-white/5 bg-black/20 p-4">
+          <div
+            className="border-t border-white/5 bg-black/20 p-4"
+            ref={chatContainerRef}
+          >
             <div className="mb-3 flex items-center justify-center gap-5">
               <button
                 onClick={() => spawnEmoji('❤️')}
@@ -827,19 +966,99 @@ export default function CommunityRoomPage({
                 placeholder="Nhắn gì đó..."
                 className="w-full bg-transparent px-3 py-1.5 text-sm text-white placeholder-white/20 outline-none"
               />
-              <div className="flex items-center justify-between px-3 pb-1 text-white/40">
-                <div className="flex gap-4">
-                  <Smile
-                    size={18}
-                    className="cursor-pointer transition-colors hover:text-white"
-                  />
-                  <span className="cursor-pointer text-[10px] font-black uppercase transition-colors hover:text-white">
-                    GIF
-                  </span>
-                  <ImageIcon
-                    size={18}
-                    className="cursor-pointer transition-colors hover:text-white"
-                  />
+              <div className="relative flex items-center justify-between px-3 pb-1 text-white/40">
+                <div className="flex items-center gap-4">
+                  {/* Emoji Button */}
+                  <div className="relative">
+                    <Smile
+                      size={18}
+                      className={`cursor-pointer transition-colors hover:text-white ${isEmojiPickerOpen ? 'text-[#C800DF]' : ''}`}
+                      onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
+                    />
+                    <AnimatePresence>
+                      {isEmojiPickerOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                          className="absolute bottom-10 left-0 z-50 shadow-2xl"
+                        >
+                          <EmojiPicker
+                            onEmojiClick={onEmojiClick}
+                            theme={Theme.DARK}
+                            lazyLoadEmojis={true}
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* GIF Button */}
+                  <div className="relative">
+                    <span
+                      onClick={() => setIsGifPickerOpen(!isGifPickerOpen)}
+                      className={`cursor-pointer text-[10px] font-black uppercase transition-colors hover:text-white ${isGifPickerOpen ? 'text-[#C800DF]' : ''}`}
+                    >
+                      GIF
+                    </span>
+                    <AnimatePresence>
+                      {isGifPickerOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 10 }}
+                          className="absolute bottom-10 left-0 z-50 flex h-80 w-72 flex-col rounded-2xl border border-white/10 bg-[#121214] p-3 shadow-2xl"
+                        >
+                          <input
+                            type="text"
+                            placeholder="Tìm GIF..."
+                            value={gifSearch}
+                            onChange={(e) => setGifSearch(e.target.value)}
+                            className="mb-3 w-full rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-xs outline-none focus:border-[#C800DF]"
+                            autoFocus
+                          />
+                          <div className="scrollbar-hide grid flex-1 grid-cols-2 gap-2 overflow-y-auto">
+                            {gifs.map((gif: any) => (
+                              <img
+                                key={gif.id}
+                                src={gif.images.fixed_height_small.url}
+                                alt="gif"
+                                className="h-24 w-full cursor-pointer rounded-lg object-cover transition-transform hover:scale-105"
+                                onClick={() => {
+                                  sendMessage(gif.images.original.url);
+                                  setIsGifPickerOpen(false);
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Image Button */}
+                  <div className="relative">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                    />
+                    {isUploading ? (
+                      <Loader2
+                        size={18}
+                        className="animate-spin text-[#C800DF]"
+                      />
+                    ) : (
+                      <ImageIcon
+                        size={18}
+                        className="cursor-pointer transition-colors hover:text-white"
+                        onClick={() => fileInputRef.current?.click()}
+                      />
+                    )}
+                  </div>
+
                   <Mic
                     size={18}
                     className="cursor-pointer transition-colors hover:text-white"
@@ -900,6 +1119,39 @@ export default function CommunityRoomPage({
                   Ở lại
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Image Viewer Modal */}
+      <AnimatePresence>
+        {selectedImage && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-10">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedImage(null)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative z-[210] max-h-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 shadow-2xl"
+            >
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/80"
+              >
+                <X size={20} />
+              </button>
+              <img
+                src={selectedImage}
+                alt="Enlarged view"
+                className="max-h-[85vh] w-full object-contain"
+              />
             </motion.div>
           </div>
         )}

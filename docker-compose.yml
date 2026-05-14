@@ -26,6 +26,8 @@ services:
         - NEXT_PUBLIC_API_URL=https://api.we-watch.live
         - NEXT_PUBLIC_SOCKET_URL=https://api.we-watch.live
         - NEXT_PUBLIC_LIVEKIT_URL=wss://wewatch-8xpwiv2g.livekit.cloud
+        - NEXT_PUBLIC_GIF_API_KEY=tQiltfs9RVp6JTBIj7M3xCC28Ddsd2R5
+        - NEXT_PUBLIC_GIF_PROVIDER=giphy
     container_name: wewatch_frontend
     restart: unless-stopped
     ports:

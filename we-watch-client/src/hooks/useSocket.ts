@@ -60,6 +60,13 @@ export const useSocket = (
   onRoomEnded?: () => void
 ) => {
   const socketRef = useRef<Socket | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Khởi tạo audio object một lần
+    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+    audioRef.current.volume = 0.5;
+  }, []);
 
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -110,6 +117,9 @@ export const useSocket = (
     });
 
     socket.on('userJoined', (member: RoomMember) => {
+      // Phát tiếng đing đong
+      audioRef.current?.play().catch(() => {});
+      
       setMembers((prev) => {
         if (prev.find((m) => m.username === member.username)) return prev;
         return [...prev, member];
