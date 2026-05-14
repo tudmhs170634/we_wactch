@@ -18,6 +18,7 @@ const ROOM_CHAT_KEY = (roomId: string) => `ww:room:${roomId}:chat`;
 const ROOM_WISHLIST_KEY = (roomId: string) => `ww:room:${roomId}:wishlist`;
 const USER_LOCATION_KEY = (username: string) => `ww:user:${username.trim().toLowerCase()}:location`;
 const MEMBER_SOCKET_KEY = (roomId: string, socketId: string) => `${ROOM_MEMBERS_KEY(roomId)}:socket:${socketId}`;
+const ROOM_VIDEO_STATE_KEY = (roomId: string) => `ww:room:${roomId}:videoState`;
 
 const CHAT_TTL = 60 * 60 * 24; // 24 giờ
 const MEMBER_TTL = 60 * 60; // 1 giờ
@@ -50,6 +51,12 @@ export interface WishlistVideo {
     duration?: number;
     addedBy: string;
     addedAt: number;
+}
+
+export interface VideoState {
+    isPlaying: boolean;
+    currentTime: number;
+    lastUpdated: number; // Date.now()
 }
 
 import { OnModuleInit } from '@nestjs/common';
@@ -278,24 +285,13 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         const username = data.username?.trim() || 'Anonymous';
         const joinAt = Date.now();
 
-        // ─── Kiểm tra một người - một tab (One session per user) ────────────────
+        // (Bỏ qua kiểm tra một người - một tab để thuận tiện test đồng bộ)
+        /*
         const existingSocket = Array.from(this.socketRoomMap.values()).find(
             (s) => s.username.toLowerCase() === username.toLowerCase()
         );
-
-        if (existingSocket) {
-            this.logger.warn(`User ${username} blocked: already has an active session in room ${existingSocket.roomId}`);
-            client.emit('error', 'Bạn đang tham gia phòng chiếu ở một cửa sổ khác. Vui lòng đóng cửa sổ đó trước.');
-            return;
-        }
-
-        // Kiểm tra location trong Redis (để xử lý các case ghost session hoặc multi-server nếu có)
-        const currentRoomId = await this.redis.get<string>(USER_LOCATION_KEY(username));
-        if (currentRoomId && currentRoomId !== roomId) {
-            this.logger.warn(`User ${username} blocked by Redis location: in room ${currentRoomId}`);
-            client.emit('error', 'Bạn đang ở một phòng khác. Vui lòng rời phòng đó trước.');
-            return;
-        }
+        ...
+        */
 
         // ─── Kiểm tra sự tồn tại và trạng thái phòng ──────────────────────────
         const room = await this.prisma.room.findUnique({
@@ -380,6 +376,12 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         // Gửi wishlist hiện tại cho client mới join
         const wishlist = await this.redis.lrange<WishlistVideo>(ROOM_WISHLIST_KEY(roomId), 0, -1);
         client.emit('wishlistSync', wishlist);
+
+        // Gửi trạng thái video hiện tại cho client mới join
+        const videoState = await this.redis.get<VideoState>(ROOM_VIDEO_STATE_KEY(roomId));
+        if (videoState) {
+            client.emit('videoSync', videoState);
+        }
 
         // System message
         const systemMsg: ChatMessage = {
@@ -500,6 +502,52 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         this.server.to(roomId).emit('emojiReaction', event);
     }
 
+    // ─── Video Synchronization ──────────────────────────────────────────────
+
+    @SubscribeMessage('videoAction')
+    async handleVideoAction(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string; action: 'play' | 'pause' | 'seek'; currentTime: number; sentAt: number },
+    ) {
+        const { roomId, action, currentTime, sentAt } = data;
+        const info = this.socketRoomMap.get(client.id);
+        if (!info) return;
+
+        const videoState: VideoState = {
+            isPlaying: action === 'play' || (action === 'seek' ? true : false), // Mặc định seek xong thì play
+            currentTime,
+            lastUpdated: Date.now(),
+        };
+
+        // Nếu là lệnh pause, ta lưu trạng thái pause
+        if (action === 'pause') videoState.isPlaying = false;
+
+        // Lưu trạng thái vào Redis
+        await this.redis.set(ROOM_VIDEO_STATE_KEY(roomId), videoState, WISHLIST_TTL);
+
+        // Broadcast cho tất cả những người KHÁC trong phòng
+        client.to(roomId).emit('videoAction', {
+            action,
+            currentTime,
+            sentAt,
+            username: info.username,
+        });
+
+        this.logger.log(`Video action [${action}] by ${info.username} in room ${roomId} at ${currentTime}s`);
+    }
+
+    @SubscribeMessage('requestVideoSync')
+    async handleRequestVideoSync(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string },
+    ) {
+        const { roomId } = data;
+        const videoState = await this.redis.get<VideoState>(ROOM_VIDEO_STATE_KEY(roomId));
+        if (videoState) {
+            client.emit('videoSync', videoState);
+        }
+    }
+
     // ─── Video Wishlist ─────────────────────────────────────────────────────
 
     @SubscribeMessage('addVideoToWishlist')
@@ -513,10 +561,49 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         },
     ) {
         const { roomId, video, addedBy } = data;
-
         const wishlistKey = ROOM_WISHLIST_KEY(roomId);
 
-        // Kiểm tra trùng lặp
+        // 1. Kiểm tra xem phòng có đang chiếu phim nào không
+        const currentRoom = await this.prisma.room.findUnique({
+            where: { id: roomId },
+            include: { video: true }
+        });
+
+        // 2. Nếu phòng chưa có video hoặc video hiện tại đã bị xóa/không hợp lệ -> Phát luôn
+        if (!currentRoom.videoId) {
+            this.logger.log(`Room ${roomId} is empty. Auto-playing video ${video.id}`);
+            
+            // Cập nhật Database
+            await this.prisma.room.update({
+                where: { id: roomId },
+                data: { videoId: video.id }
+            });
+
+            // Xóa trạng thái video cũ trong Redis để bắt đầu từ 0
+            await this.redis.del(ROOM_VIDEO_STATE_KEY(roomId));
+
+            // Thông báo cho mọi người chuyển phim
+            this.server.to(roomId).emit('videoChanged', {
+                videoId: video.id,
+                title: video.title,
+                videoUrl: (video as any).videoUrl, // Nếu có truyền kèm
+                thumbnailUrl: video.thumbnailUrl
+            });
+
+            const systemMsg: ChatMessage = {
+                id: `sys_auto_${Date.now()}`,
+                roomId,
+                username: 'system',
+                message: `Đang phát phim mới: ${video.title}`,
+                type: 'status',
+                timestamp: Date.now(),
+            };
+            this.server.to(roomId).emit('newMessage', systemMsg);
+            
+            return;
+        }
+
+        // 3. Nếu đang có phim -> Thêm vào hàng chờ như bình thường
         const existing = await this.redis.lrange<WishlistVideo>(wishlistKey, 0, -1);
         const isDuplicate = existing.some((v) => v.id === video.id);
 
@@ -531,15 +618,12 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
             addedAt: Date.now(),
         };
 
-        // Lưu vào Redis
         await this.redis.lpush(wishlistKey, item, MAX_WISHLIST_ITEMS);
         await this.redis.expire(wishlistKey, WISHLIST_TTL);
 
-        // Broadcast danh sách mới
         const wishlist = await this.redis.lrange<WishlistVideo>(wishlistKey, 0, -1);
         this.server.to(roomId).emit('wishlistUpdated', wishlist);
 
-        // System notification
         const systemMsg: ChatMessage = {
             id: `sys_${Date.now()}`,
             roomId,

@@ -144,6 +144,10 @@ export class RoomService {
     }
 
     async findOne(id: string): Promise<RoomWithRelations> {
+        // Kiểm tra định dạng UUID trước khi query database
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        if (!isUuid) throw new NotFoundException('Phòng không tồn tại (ID không hợp lệ)');
+
         const cached = await this.redis.get<RoomWithRelations>(ROOM_KEY(id));
         if (cached) return cached;
 

@@ -89,6 +89,11 @@ export default function WeWatchRoomPage({
     socketError,
     currentHostId,
     setCurrentHostId,
+    sendVideoAction,
+    lastVideoAction,
+    videoChangeTrigger,
+    videoState,
+    requestVideoSync,
   } = useSocket(room?.id, user, password);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -107,6 +112,7 @@ export default function WeWatchRoomPage({
   const [libPage, setLibPage] = useState(1);
   const [hasMoreLib, setHasMoreLib] = useState(true);
   const [isLoadingLib, setIsLoadingLib] = useState(false);
+  const [timeOffset, setTimeOffset] = useState(0);
 
   // Wishlist error toast
   useEffect(() => {
@@ -181,9 +187,15 @@ export default function WeWatchRoomPage({
       try {
         setLoading(true);
         let data;
-        try {
-          data = await getRoom(params.slug);
-        } catch {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.slug);
+        
+        if (isUuid) {
+          try {
+            data = await getRoom(params.slug);
+          } catch {
+            data = await getRoomBySlug(params.slug);
+          }
+        } else {
           data = await getRoomBySlug(params.slug);
         }
         setRoom(data);
@@ -198,14 +210,19 @@ export default function WeWatchRoomPage({
           }
         }
       } catch (err: any) {
-        toast.error('Không thể tải thông tin phòng.');
+        if (err.response?.status === 404) {
+          toast.error('Phòng không tồn tại hoặc đã bị đóng.');
+          router.push('/rooms');
+        } else {
+          toast.error('Không thể tải thông tin phòng.');
+        }
         console.error(err);
       } finally {
         setLoading(false);
       }
     };
     fetchRoom();
-  }, [params.slug]);
+  }, [params.slug, videoChangeTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Determine host
   useEffect(() => {
@@ -283,6 +300,7 @@ export default function WeWatchRoomPage({
 
   const handleSync = () => {
     setIsSyncing(true);
+    requestVideoSync(); // Thực hiện đồng bộ thật
     setTimeout(() => {
       setIsSyncing(false);
       setSyncDone(true);
@@ -340,6 +358,24 @@ export default function WeWatchRoomPage({
               </span>
             </div>
           )}
+
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
+          >
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+            <div className="flex flex-col items-start leading-tight">
+              <span>
+                {isSyncing ? 'Đang đồng bộ...' : syncDone ? 'Đã đồng bộ!' : 'Đồng bộ với Host'}
+              </span>
+              {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
+                <span className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}>
+                  Lệch: {timeOffset > 0 ? '+' : ''}{timeOffset.toFixed(1)}s
+                </span>
+              )}
+            </div>
+          </button>
 
           <button
             onClick={() => setIsLeaveModalOpen(true)}
@@ -626,7 +662,14 @@ export default function WeWatchRoomPage({
         <div className="flex flex-1 flex-col gap-4 overflow-hidden">
           <div className="group relative aspect-video w-full overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl">
             {streamUrl ? (
-              <VideoPlayer src={streamUrl} poster={room?.video?.thumbnailUrl} />
+              <VideoPlayer
+                src={streamUrl}
+                poster={room?.video?.thumbnailUrl}
+                onAction={sendVideoAction}
+                lastAction={lastVideoAction}
+                initialState={videoState}
+                onOffsetChange={setTimeOffset}
+              />
             ) : room?.video ? (
               <div className="flex h-full w-full animate-pulse items-center justify-center bg-white/5">
                 <Loader2 className="h-10 w-10 animate-spin text-white/20" />

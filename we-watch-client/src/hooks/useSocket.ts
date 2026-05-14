@@ -36,6 +36,19 @@ export interface RoomMember {
   avatarUrl?: string;
 }
 
+export interface VideoState {
+  isPlaying: boolean;
+  currentTime: number;
+  lastUpdated: number;
+}
+
+export interface VideoActionEvent {
+  action: 'play' | 'pause' | 'seek';
+  currentTime: number;
+  sentAt: number;
+  username: string;
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3000';
@@ -51,6 +64,9 @@ export const useSocket = (roomId?: string, user?: any, password?: string) => {
   const [socketError, setSocketError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [currentHostId, setCurrentHostId] = useState<string | null>(null);
+  const [videoState, setVideoState] = useState<VideoState | null>(null);
+  const [lastVideoAction, setLastVideoAction] = useState<VideoActionEvent | null>(null);
+  const [videoChangeTrigger, setVideoChangeTrigger] = useState(0);
 
   useEffect(() => {
     if (!roomId || !user) return;
@@ -132,9 +148,22 @@ export const useSocket = (roomId?: string, user?: any, password?: string) => {
       setTimeout(() => setWishlistError(null), 3000);
     });
 
-    // ── Host Transfer ────────────────────────────────────────────────────────
     socket.on('hostTransferred', ({ newHostId }: { newHostName: string, newHostId: string }) => {
       setCurrentHostId(newHostId);
+    });
+
+    // ── Video Sync ──────────────────────────────────────────────────────────
+    socket.on('videoSync', (state: VideoState) => {
+      setVideoState(state);
+    });
+
+    socket.on('videoAction', (event: VideoActionEvent) => {
+      setLastVideoAction(event);
+    });
+
+    socket.on('videoChanged', (data: any) => {
+      setVideoState(null); // Reset state cũ
+      setVideoChangeTrigger(prev => prev + 1);
     });
 
     return () => {
@@ -149,7 +178,10 @@ export const useSocket = (roomId?: string, user?: any, password?: string) => {
     };
   }, [roomId, user?.username]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Actions ──────────────────────────────────────────────────────────────
+  const requestVideoSync = useCallback(() => {
+    if (!socketRef.current || !roomId) return;
+    socketRef.current.emit('requestVideoSync', { roomId });
+  }, [roomId]);
 
   const sendMessage = useCallback(
     (message: string) => {
@@ -197,6 +229,19 @@ export const useSocket = (roomId?: string, user?: any, password?: string) => {
     [roomId],
   );
 
+  const sendVideoAction = useCallback(
+    (action: 'play' | 'pause' | 'seek', currentTime: number) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('videoAction', {
+        roomId,
+        action,
+        currentTime,
+        sentAt: Date.now(),
+      });
+    },
+    [roomId],
+  );
+
   return {
     socket: socketRef.current,
     isConnected,
@@ -211,6 +256,11 @@ export const useSocket = (roomId?: string, user?: any, password?: string) => {
     sendEmoji,
     addVideoToWishlist,
     removeVideoFromWishlist,
+    sendVideoAction,
+    requestVideoSync,
+    videoState,
+    lastVideoAction,
+    videoChangeTrigger,
     currentHostId,
     setCurrentHostId,
   };

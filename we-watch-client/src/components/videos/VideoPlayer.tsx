@@ -6,9 +6,13 @@ import { Play, Pause, Volume2, VolumeX, Maximize, Loader2 } from 'lucide-react';
 interface VideoPlayerProps {
   src: string;
   poster?: string | null;
+  onAction?: (action: 'play' | 'pause' | 'seek', currentTime: number) => void;
+  lastAction?: { action: 'play' | 'pause' | 'seek'; currentTime: number; sentAt: number; username: string } | null;
+  initialState?: { isPlaying: boolean; currentTime: number; lastUpdated: number } | null;
+  onOffsetChange?: (offset: number) => void;
 }
 
-export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
+export default function VideoPlayer({ src, poster, onAction, lastAction, initialState, onOffsetChange }: VideoPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -17,12 +21,89 @@ export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Flag để tránh vòng lặp: khi nhận lệnh từ socket thì không emit ngược lại
+  const ignoreNextEvent = useRef(false);
+
+  // ── Xử lý trạng thái ban đầu khi mới join ──
+  useEffect(() => {
+    if (!initialState || !ref.current) return;
+    const v = ref.current;
+    
+    // Tính toán giây hiện tại dựa trên thời điểm cập nhật cuối
+    const elapsed = (Date.now() - initialState.lastUpdated) / 1000;
+    const targetTime = initialState.currentTime + (initialState.isPlaying ? elapsed : 0);
+    
+    ignoreNextEvent.current = true;
+    v.currentTime = targetTime;
+    if (initialState.isPlaying) {
+      v.play().catch(() => {});
+      setPlaying(true);
+    } else {
+      v.pause();
+      setPlaying(false);
+    }
+  }, [initialState]);
+
+  // ── Xử lý lệnh từ Socket ──
+  useEffect(() => {
+    if (!lastAction || !ref.current) return;
+    const v = ref.current;
+
+    // Tính toán bù trừ độ trễ
+    const delay = (Date.now() - lastAction.sentAt) / 1000;
+    const targetTime = lastAction.currentTime + (lastAction.action === 'play' ? delay : 0);
+
+    ignoreNextEvent.current = true; // Đánh dấu là thay đổi từ hệ thống
+
+    switch (lastAction.action) {
+      case 'play':
+        v.currentTime = targetTime;
+        v.play().catch(() => {});
+        setPlaying(true);
+        break;
+      case 'pause':
+        v.currentTime = lastAction.currentTime;
+        v.pause();
+        setPlaying(false);
+        break;
+      case 'seek':
+        v.currentTime = lastAction.currentTime;
+        if (!v.paused) v.play().catch(() => {});
+        break;
+    }
+  }, [lastAction]);
+
+  // ── Tính toán độ lệch với Host ──
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (!ref.current || !initialState) return;
+      const v = ref.current;
+      
+      // Tính thời gian Host đáng lẽ đang ở đó
+      const elapsed = (Date.now() - initialState.lastUpdated) / 1000;
+      const hostTime = initialState.currentTime + (initialState.isPlaying ? elapsed : 0);
+      
+      const diff = v.currentTime - hostTime;
+      onOffsetChange?.(diff);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [initialState, onOffsetChange]);
 
   const togglePlay = () => {
     const v = ref.current;
     if (!v) return;
-    playing ? v.pause() : v.play();
-    setPlaying(!playing);
+    
+    const newPlaying = !playing;
+    if (newPlaying) v.play(); else v.pause();
+    setPlaying(newPlaying);
+    
+    // Chỉ gửi event nếu là user bấm
+    if (!ignoreNextEvent.current) {
+      onAction?.(newPlaying ? 'play' : 'pause', v.currentTime);
+    }
+    ignoreNextEvent.current = false;
   };
 
   const toggleMute = () => {
@@ -36,7 +117,10 @@ export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
     if (!v) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
-    v.currentTime = pct * v.duration;
+    const newTime = pct * v.duration;
+    
+    v.currentTime = newTime;
+    onAction?.('seek', newTime);
   };
 
   const fullscreen = () => ref.current?.requestFullscreen();
@@ -56,7 +140,71 @@ export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
       : `${m}:${String(sec).padStart(2, '0')}`;
   };
 
-  useEffect(() => () => { if (hideTimer.current) clearTimeout(hideTimer.current); }, []);
+  useEffect(() => {
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  // ── Xử lý phím tắt (Keyboard Shortcuts) ──
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Nếu đang gõ trong ô input hoặc textarea thì không kích hoạt phím tắt
+      const active = document.activeElement;
+      if (active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA') return;
+
+      const v = ref.current;
+      if (!v) return;
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'KeyM':
+          toggleMute();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          v.currentTime = Math.max(0, v.currentTime - 10);
+          onAction?.('seek', v.currentTime);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          v.currentTime = Math.min(v.duration, v.currentTime + 10);
+          onAction?.('seek', v.currentTime);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          v.volume = Math.min(1, v.volume + 0.1);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          v.volume = Math.max(0, v.volume - 0.1);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [playing, muted, onAction]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync state khi video tự thay đổi (ví dụ bấm nút mặc định của trình duyệt)
+  const handlePlay = () => {
+    setPlaying(true);
+    if (!ignoreNextEvent.current) {
+        onAction?.('play', ref.current?.currentTime || 0);
+    }
+    ignoreNextEvent.current = false;
+  };
+
+  const handlePause = () => {
+    setPlaying(false);
+    if (!ignoreNextEvent.current) {
+        onAction?.('pause', ref.current?.currentTime || 0);
+    }
+    ignoreNextEvent.current = false;
+  };
 
   return (
     <div
@@ -79,8 +227,8 @@ export default function VideoPlayer({ src, poster }: VideoPlayerProps) {
         }}
         onWaiting={() => setLoading(true)}
         onCanPlay={() => setLoading(false)}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
+        onPlay={handlePlay}
+        onPause={handlePause}
         onClick={togglePlay}
         preload="metadata"
       />

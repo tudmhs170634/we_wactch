@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, use } from 'react';
 import { MOCK_VIDEOS } from '@/src/constants/mockData';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -32,6 +32,7 @@ import {
   Copy,
   UserPlus,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -39,16 +40,20 @@ import { useSocket } from '@/src/hooks/useSocket';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import { getRoomBySlug } from '@/src/services/room';
 import { toast } from 'sonner';
+import VideoPlayer from '@/src/components/videos/VideoPlayer';
 
 export default function CommunityRoomPage({
-  params,
+  params: paramsPromise,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
+  const params = use(paramsPromise);
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
   const [room, setRoom] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncDone, setSyncDone] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
@@ -61,6 +66,7 @@ export default function CommunityRoomPage({
   const [visibleStatusIds, setVisibleStatusIds] = useState<Set<string>>(
     new Set()
   );
+  const [timeOffset, setTimeOffset] = useState(0);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -76,6 +82,11 @@ export default function CommunityRoomPage({
     socketError,
     currentHostId,
     setCurrentHostId,
+    sendVideoAction,
+    lastVideoAction,
+    videoChangeTrigger,
+    videoState,
+    requestVideoSync,
   } = useSocket(room?.id, user);
 
   // Load room by slug
@@ -163,6 +174,16 @@ export default function CommunityRoomPage({
     sendEmoji(emoji);
   };
 
+  const handleSync = () => {
+    setIsSyncing(true);
+    requestVideoSync();
+    setTimeout(() => {
+      setIsSyncing(false);
+      setSyncDone(true);
+      setTimeout(() => setSyncDone(false), 2000);
+    }, 1000);
+  };
+
   const handleKick = (name: string) => {
     alert(`Đã kích ${name} khỏi phòng cộng đồng!`);
   };
@@ -188,6 +209,23 @@ export default function CommunityRoomPage({
           </span>
         </Link>
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
+          >
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+            <div className="flex flex-col items-start leading-tight">
+              <span>
+                {isSyncing ? 'Đang đồng bộ...' : syncDone ? 'Đã đồng bộ!' : 'Đồng bộ với Host'}
+              </span>
+              {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
+                <span className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}>
+                  Lệch: {timeOffset > 0 ? '+' : ''}{timeOffset.toFixed(1)}s
+                </span>
+              )}
+            </div>
+          </button>
           <button
             onClick={() => setIsLeaveModalOpen(true)}
             className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30"
@@ -419,6 +457,32 @@ export default function CommunityRoomPage({
                 <span className="text-xs font-bold text-white/60">
                   Và {Math.max(0, socketMembers.length - 3)} người khác đang xem
                 </span>
+              </div>
+            )}
+          </div>
+
+          {/* MAIN PLAYER AREA */}
+          <div className="glass relative flex-1 overflow-hidden rounded-[32px] border border-white/10 bg-black/60 shadow-2xl">
+            {room?.video?.streamUrl ? (
+              <VideoPlayer
+                src={room.video.streamUrl}
+                poster={room.video.thumbnailUrl}
+                onAction={sendVideoAction}
+                lastAction={lastVideoAction}
+                initialState={videoState}
+                onOffsetChange={setTimeOffset}
+              />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-white/5">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/5 text-[#C800DF]">
+                  <Play size={40} fill="currentColor" className="ml-1" />
+                </div>
+                <div className="text-center">
+                  <h3 className="text-lg font-bold text-white">Chưa có video</h3>
+                  <p className="text-sm text-white/40">
+                    Vui lòng chọn phim từ thư viện để bắt đầu
+                  </p>
+                </div>
               </div>
             )}
           </div>
