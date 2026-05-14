@@ -12,12 +12,9 @@ services:
     env_file:
       - ./we-wactch-server/.env
     environment:
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/wewatch2?schema=public
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -38,24 +35,6 @@ services:
     depends_on:
       - backend
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: wewatch_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: wewatch2
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   redis:
     image: redis:7-alpine
     container_name: wewatch_redis
@@ -71,5 +50,4 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
   redis_data:
