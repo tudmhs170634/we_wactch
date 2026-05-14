@@ -88,3 +88,8 @@ export const deleteRoom = async (id: string) => {
   const { data } = await api.delete(`/rooms/${id}`);
   return data;
 };
+
+export const terminateRoom = async (id: string, reason: string) => {
+  const { data } = await api.post(`/rooms/${id}/terminate`, { reason });
+  return data;
+};

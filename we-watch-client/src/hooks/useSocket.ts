@@ -57,7 +57,7 @@ export const useSocket = (
   roomId?: string,
   user?: any,
   password?: string,
-  onRoomEnded?: () => void
+  onRoomEnded?: (reason?: string, stoppedBy?: string, stoppedByRole?: string) => void
 ) => {
   const socketRef = useRef<Socket | null>(null);
   const joinAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -83,6 +83,9 @@ export const useSocket = (
   const [videoState, setVideoState] = useState<VideoState | null>(null);
   const [lastVideoAction, setLastVideoAction] = useState<VideoActionEvent | null>(null);
   const [videoChangeTrigger, setVideoChangeTrigger] = useState(0);
+  // username -> mutedUntil (timestamp ms)
+  const [mutedUsers, setMutedUsers] = useState<Record<string, number>>({});
+  const [chatMuteInfo, setChatMuteInfo] = useState<{ mutedUntil: number; mutedBy: string; remainingMinutes: number } | null>(null);
 
   useEffect(() => {
     if (!roomId || !user) return;
@@ -137,9 +140,9 @@ export const useSocket = (
       setMembers((prev) => prev.filter((m) => m.username !== username));
     });
 
-    // Lắng nghe khi host kết thúc phòng
-    socket.on('roomEnded', () => {
-      onRoomEnded?.();
+    // Lắng nghe khi host/admin kết thúc phòng
+    socket.on('roomEnded', (data?: { reason?: string; stoppedBy?: string; stoppedByRole?: string }) => {
+      onRoomEnded?.(data?.reason, data?.stoppedBy, data?.stoppedByRole);
     });
 
     // ── Chat ─────────────────────────────────────────────────────────────────
@@ -188,9 +191,35 @@ export const useSocket = (
       setLastVideoAction(event);
     });
 
-    socket.on('videoChanged', (data: any) => {
+    socket.on('videoChanged', (_data: any) => {
       setVideoState(null); // Reset state cũ
       setVideoChangeTrigger(prev => prev + 1);
+    });
+
+    // ── Chat Moderation ─────────────────────────────────────────────────────
+    // Xóa tin nhắn khỏi UI khi admin/host xóa
+    socket.on('messageDeleted', ({ messageId }: { messageId: string }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    });
+
+    // Khi admin mute một user
+    socket.on('userMuted', ({ username, mutedUntil }: { username: string; mutedUntil: number; mutedBy: string; durationMinutes: number }) => {
+      setMutedUsers((prev) => ({ ...prev, [username]: mutedUntil }));
+    });
+
+    // Khi admin bỏ mute
+    socket.on('userUnmuted', ({ username }: { username: string }) => {
+      setMutedUsers((prev) => {
+        const next = { ...prev };
+        delete next[username];
+        return next;
+      });
+    });
+
+    // Khi chính user bị cấm cố gửi tin nhắn -> server trả về thông tin mute
+    socket.on('chatMuted', (info: { mutedUntil: number; mutedBy: string; remainingMinutes: number }) => {
+      setChatMuteInfo(info);
+      setTimeout(() => setChatMuteInfo(null), 4000);
     });
 
     return () => {
@@ -269,6 +298,30 @@ export const useSocket = (
     [roomId],
   );
 
+  const deleteMessage = useCallback(
+    (messageId: string) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('deleteMessage', { roomId, messageId });
+    },
+    [roomId],
+  );
+
+  const muteChatUser = useCallback(
+    (targetUsername: string, durationMinutes: number) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('muteChatUser', { roomId, targetUsername, durationMinutes });
+    },
+    [roomId],
+  );
+
+  const unmuteChatUser = useCallback(
+    (targetUsername: string) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('unmuteChatUser', { roomId, targetUsername });
+    },
+    [roomId],
+  );
+
   const playVideoFromWishlist = useCallback(
     (videoId: string) => {
       if (!socketRef.current || !roomId) return;
@@ -299,5 +352,10 @@ export const useSocket = (
     videoChangeTrigger,
     currentHostId,
     setCurrentHostId,
+    mutedUsers,
+    chatMuteInfo,
+    deleteMessage,
+    muteChatUser,
+    unmuteChatUser,
   };
 };
