@@ -659,9 +659,7 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
     private async notifyRoomsList(roomId: string) {
         const members = await this.getRoomMembers(roomId);
-        // Ở danh sách phòng, ta hiển thị tổng số người xem thực tế (có thể bao gồm host nếu muốn hoặc lọc ra)
-        // Thông thường hiển thị viewerCount/maxUsers
-        // Để đơn giản, ta hiển thị số lượng unique usernames hiện có
+        this.logger.log(`Notifying global list: Room ${roomId} now has ${members.length} users`);
         this.server.to('global_rooms_list').emit('roomUpdate', { roomId, currentUsers: members.length });
     }
 
