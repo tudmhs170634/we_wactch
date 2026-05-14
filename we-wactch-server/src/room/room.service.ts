@@ -144,8 +144,25 @@ export class RoomService {
       this.prisma.room.count({ where }),
     ]);
 
+    // Lấy số lượng người dùng thực tế từ Redis cho mỗi phòng
+    const roomsWithCounts = await Promise.all(
+      rooms.map(async (room) => {
+        const keys = await this.redis.keys(`ww:room:${room.id}:members:socket:*`);
+        // Đếm số lượng username duy nhất
+        const usernames = new Set<string>();
+        for (const key of keys) {
+          const mData = await this.redis.get<any>(key);
+          if (mData?.username) usernames.add(mData.username);
+        }
+        return {
+          ...room,
+          currentUsers: usernames.size,
+        };
+      }),
+    );
+
     const result = {
-      rooms,
+      rooms: roomsWithCounts,
       total,
       page,
       limit,
