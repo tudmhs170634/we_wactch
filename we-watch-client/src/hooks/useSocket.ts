@@ -60,12 +60,16 @@ export const useSocket = (
   onRoomEnded?: () => void
 ) => {
   const socketRef = useRef<Socket | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const joinAudioRef = useRef<HTMLAudioElement | null>(null);
+  const leaveAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    // Khởi tạo audio object một lần
-    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
-    audioRef.current.volume = 0.5;
+    // Khởi tạo audio objects
+    joinAudioRef.current = new Audio('/join.wav');
+    leaveAudioRef.current = new Audio('/out.wav');
+    
+    if (joinAudioRef.current) joinAudioRef.current.volume = 0.5;
+    if (leaveAudioRef.current) leaveAudioRef.current.volume = 0.5;
   }, []);
 
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -117,8 +121,8 @@ export const useSocket = (
     });
 
     socket.on('userJoined', (member: RoomMember) => {
-      // Phát tiếng đing đong
-      audioRef.current?.play().catch(() => {});
+      // Phát tiếng vào phòng
+      joinAudioRef.current?.play().catch(() => {});
       
       setMembers((prev) => {
         if (prev.find((m) => m.username === member.username)) return prev;
@@ -127,6 +131,9 @@ export const useSocket = (
     });
 
     socket.on('userLeft', (username: string) => {
+      // Phát tiếng rời phòng
+      leaveAudioRef.current?.play().catch(() => {});
+
       setMembers((prev) => prev.filter((m) => m.username !== username));
     });
 
