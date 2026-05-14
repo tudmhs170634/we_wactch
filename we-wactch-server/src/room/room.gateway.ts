@@ -17,6 +17,7 @@ const ROOM_MEMBERS_KEY = (roomId: string) => `ww:room:${roomId}:members`;
 const ROOM_CHAT_KEY = (roomId: string) => `ww:room:${roomId}:chat`;
 const ROOM_WISHLIST_KEY = (roomId: string) => `ww:room:${roomId}:wishlist`;
 const USER_LOCATION_KEY = (username: string) => `ww:user:${username.trim().toLowerCase()}:location`;
+const CHAT_MUTE_KEY = (roomId: string, username: string) => `ww:room:${roomId}:mute:${username.trim().toLowerCase()}`;
 const MEMBER_SOCKET_KEY = (roomId: string, socketId: string) => `${ROOM_MEMBERS_KEY(roomId)}:socket:${socketId}`;
 const ROOM_VIDEO_STATE_KEY = (roomId: string) => `ww:room:${roomId}:videoState`;
 
@@ -212,21 +213,31 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
                     }
                 } else {
                     // Phòng trống -> isActive = false
-                    const updatedRoom = await this.prisma.room.update({
-                        where: { id: roomId },
-                        data: { isActive: false }
-                    });
-                    
-                    // Clear cache for this room
-                    await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${updatedRoom.slug}`);
-                    const listKeys = await this.redis.keys('rooms:list:*');
-                    if (listKeys.length > 0) {
-                        await Promise.all(listKeys.map(k => this.redis.del(k)));
+                    // Dùng try-catch để xử lý trường hợp phòng đã bị xóa bởi admin (P2025)
+                    try {
+                        const updatedRoom = await this.prisma.room.update({
+                            where: { id: roomId },
+                            data: { isActive: false }
+                        });
+                        
+                        // Clear cache for this room
+                        await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${updatedRoom.slug}`);
+                        const listKeys = await this.redis.keys('rooms:list:*');
+                        if (listKeys.length > 0) {
+                            await Promise.all(listKeys.map(k => this.redis.del(k)));
+                        }
+                        
+                        // Notify list update
+                        this.roomService.roomListUpdated$.next();
+                        this.logger.log(`Room ${roomId} deactivated because host ${username} left and no one remains.`);
+                    } catch (err: any) {
+                        if (err?.code === 'P2025') {
+                            // Phòng đã bị xóa trước đó (vd: admin terminate) — bỏ qua
+                            this.logger.warn(`Room ${roomId} was already deleted before disconnect grace period resolved. Skipping deactivation.`);
+                        } else {
+                            throw err;
+                        }
                     }
-                    
-                    // Notify list update
-                    this.roomService.roomListUpdated$.next();
-                    this.logger.log(`Room ${roomId} deactivated because host ${username} left and no one remains.`);
                 }
             }
 
@@ -462,6 +473,20 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
         if (!message?.trim()) return;
 
+        // ─── Kiểm tra xem user có đang bị cấm chat không ──────────────────────
+        const muteData = await this.redis.get<{ mutedUntil: number; mutedBy: string }>(
+            CHAT_MUTE_KEY(roomId, username)
+        );
+        if (muteData) {
+            const remaining = Math.ceil((muteData.mutedUntil - Date.now()) / 1000 / 60);
+            client.emit('chatMuted', {
+                mutedUntil: muteData.mutedUntil,
+                mutedBy: muteData.mutedBy,
+                remainingMinutes: remaining,
+            });
+            return; // Không gửi tin nhắn
+        }
+
         const chatMsg: ChatMessage = {
             id: `${client.id}_${Date.now()}`,
             roomId,
@@ -478,6 +503,122 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
         // Broadcast cho tất cả trong phòng (kể cả người gửi)
         this.server.to(roomId).emit('newMessage', chatMsg);
+    }
+
+    // ─── Admin: Xóa tin nhắn ────────────────────────────────────────────────
+
+    @SubscribeMessage('deleteMessage')
+    async handleDeleteMessage(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string; messageId: string },
+    ) {
+        const { roomId, messageId } = data;
+
+        // Lấy thông tin người gọi để kiểm tra quyền admin/host
+        const info = this.socketRoomMap.get(client.id);
+        if (!info) return;
+
+        const isAdmin = info.role === 'admin';
+        const isHost = await this.prisma.room.findUnique({
+            where: { id: roomId },
+            select: { hostId: true },
+        }).then(r => r?.hostId === info.userId);
+
+        if (!isAdmin && !isHost) {
+            client.emit('error', 'Bạn không có quyền xóa tin nhắn.');
+            return;
+        }
+
+        // Lấy danh sách chat từ Redis, lọc bỏ tin nhắn cần xóa
+        const chatKey = ROOM_CHAT_KEY(roomId);
+        const history = await this.redis.lrange<ChatMessage>(chatKey, 0, -1);
+        const filtered = history.filter(m => m.id !== messageId);
+
+        // Rebuild Redis list
+        await this.redis.del(chatKey);
+        for (let i = filtered.length - 1; i >= 0; i--) {
+            await this.redis.lpush(chatKey, filtered[i], MAX_CHAT_MESSAGES);
+        }
+        if (filtered.length > 0) await this.redis.expire(chatKey, CHAT_TTL);
+
+        // Thông báo cho tất cả người trong phòng để xóa tin nhắn đó khỏi UI
+        this.server.to(roomId).emit('messageDeleted', { messageId });
+        this.logger.log(`Message ${messageId} deleted by ${info.username} (${isAdmin ? 'admin' : 'host'}) in room ${roomId}`);
+    }
+
+    // ─── Admin: Cấm chat user ────────────────────────────────────────────────
+
+    @SubscribeMessage('muteChatUser')
+    async handleMuteChatUser(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string; targetUsername: string; durationMinutes: number },
+    ) {
+        const { roomId, targetUsername, durationMinutes } = data;
+
+        // Kiểm tra quyền
+        const info = this.socketRoomMap.get(client.id);
+        if (!info) return;
+
+        const isAdmin = info.role === 'admin';
+        const room = await this.prisma.room.findUnique({
+            where: { id: roomId },
+            select: { hostId: true },
+        });
+        const isHost = room?.hostId === info.userId;
+
+        if (!isAdmin && !isHost) {
+            client.emit('error', 'Bạn không có quyền cấm chat.');
+            return;
+        }
+
+        const mutedUntil = Date.now() + durationMinutes * 60 * 1000;
+        const ttlSeconds = durationMinutes * 60;
+
+        await this.redis.set(
+            CHAT_MUTE_KEY(roomId, targetUsername),
+            { mutedUntil, mutedBy: info.username },
+            ttlSeconds,
+        );
+
+        // Thông báo cho người bị cấm (nếu đang online)
+        this.server.to(roomId).emit('userMuted', {
+            username: targetUsername,
+            mutedUntil,
+            mutedBy: info.username,
+            durationMinutes,
+        });
+
+        this.logger.log(`User ${targetUsername} muted for ${durationMinutes}min by ${info.username} in room ${roomId}`);
+    }
+
+    // ─── Admin: Bỏ cấm chat ──────────────────────────────────────────────────
+
+    @SubscribeMessage('unmuteChatUser')
+    async handleUnmuteChatUser(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string; targetUsername: string },
+    ) {
+        const { roomId, targetUsername } = data;
+
+        const info = this.socketRoomMap.get(client.id);
+        if (!info) return;
+
+        const isAdmin = info.role === 'admin';
+        const room = await this.prisma.room.findUnique({
+            where: { id: roomId },
+            select: { hostId: true },
+        });
+        const isHost = room?.hostId === info.userId;
+
+        if (!isAdmin && !isHost) {
+            client.emit('error', 'Bạn không có quyền.');
+            return;
+        }
+
+        await this.redis.del(CHAT_MUTE_KEY(roomId, targetUsername));
+
+        this.server.to(roomId).emit('userUnmuted', { username: targetUsername });
+        this.logger.log(`User ${targetUsername} unmuted by ${info.username} in room ${roomId}`);
     }
 
     // ─── Emoji Reaction ─────────────────────────────────────────────────────
@@ -689,13 +830,20 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     @SubscribeMessage('endRoom')
     async handleEndRoom(
         @ConnectedSocket() client: Socket,
-        @MessageBody() data: { roomId: string },
+        @MessageBody() data: { roomId: string; reason?: string },
     ) {
-        const { roomId } = data;
+        const { roomId, reason } = data;
+
+        // Lấy thông tin người dừng phòng
+        const info = this.socketRoomMap.get(client.id);
+        const stoppedBy = info?.username || 'unknown';
+        const stoppedByRole = info?.role === 'admin' ? 'admin' : 'host';
+
         // Broadcast cho tất cả người trong phòng biết phòng đã kết thúc
-        this.server.to(roomId).emit('roomEnded');
+        this.server.to(roomId).emit('roomEnded', { reason, stoppedBy, stoppedByRole });
+
         // Dọn sạch dữ liệu phòng trên Redis (members, chat, wishlist)
         await this.redis.delPattern(`ww:room:${roomId}:*`);
-        this.logger.log(`Room ${roomId} ended by host and Redis data cleared`);
+        this.logger.log(`Room ${roomId} ended by ${stoppedBy} (${stoppedByRole}) and Redis data cleared`);
     }
 }

@@ -5,10 +5,15 @@ import { useSocket } from '@/src/hooks/useSocket';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import { MOCK_VIDEOS, MOCK_ROOMS } from '@/src/constants/mockData';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Select from '@/src/components/ui/Select';
-import { getRoom, getRoomBySlug, deleteRoom } from '@/src/services/room';
+import {
+  getRoom,
+  getRoomBySlug,
+  deleteRoom,
+  terminateRoom,
+} from '@/src/services/room';
 import api from '@/src/lib/axios';
 import VideoPlayer from '@/src/components/videos/VideoPlayer';
 import {
@@ -41,6 +46,9 @@ import {
   RefreshCw,
   FileImage,
   X,
+  MonitorPlay,
+  ShieldAlert,
+  StopCircle,
 } from 'lucide-react';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -52,8 +60,12 @@ export default function CommunityRoomPage({
   params: Promise<{ slug: string }>;
 }) {
   const params = use(paramsPromise);
+  const searchParams = useSearchParams();
+  const isMonitorMode = searchParams.get('monitor') === 'true';
   const { user } = useAuthStore();
   const router = useRouter();
+  // Flag ngăn các API call sau khi phòng đã kết thúc
+  const isRoomEnded = useRef(false);
 
   // --- STATE DỬ LIỆU PHÒNG ---
   const [room, setRoom] = useState<any>(null);
@@ -67,6 +79,7 @@ export default function CommunityRoomPage({
   useEffect(() => {
     const fetchRoom = async () => {
       if (!params.slug) return;
+      if (isRoomEnded.current) return; // Phòng đã kết thúc, không fetch nữa
       try {
         setLoading(true);
         let data;
@@ -86,7 +99,7 @@ export default function CommunityRoomPage({
           }
         }
       } catch (err) {
-        console.error(err);
+        if (!isRoomEnded.current) console.error(err);
       } finally {
         setLoading(false);
       }
@@ -109,6 +122,20 @@ export default function CommunityRoomPage({
   );
   const [timeOffset, setTimeOffset] = useState(0);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [isEndRoomModalOpen, setIsEndRoomModalOpen] = useState(false);
+  const [endRoomReason, setEndRoomReason] = useState('Vi phạm bản quyền');
+
+  // --- Admin Chat Moderation States ---
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    messageId: string;
+    messageUsername: string;
+  } | null>(null);
+  const [muteDialog, setMuteDialog] = useState<{ username: string } | null>(
+    null
+  );
+  const isAdmin = user?.role === 'admin';
 
   // New Chat Feature States
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
@@ -154,22 +181,62 @@ export default function CommunityRoomPage({
     videoChangeTrigger,
     videoState,
     requestVideoSync,
-  } = useSocket(room?.id, user, undefined, () => router.push('/rooms'));
+    mutedUsers,
+    chatMuteInfo,
+    deleteMessage,
+    muteChatUser,
+    unmuteChatUser,
+  } = useSocket(
+    room?.id,
+    user,
+    undefined,
+    (reason?: string, stoppedBy?: string, stoppedByRole?: string) => {
+      // Đánh dấu phòng đã kết thúc → ngăn mọi API fetch tiếp theo
+      isRoomEnded.current = true;
+
+      // Dùng closure user & room đã có sẵn
+      const amIHost = room?.host?.username === user?.username;
+
+      if (amIHost && stoppedByRole === 'admin') {
+        // Host bị admin dừng phiên → cần thông báo rõ ràng
+        const reasonText = reason ? ` Lý do: "${reason}".` : '';
+        toast.error(`Phiên live của bạn đã bị Admin dừng bởi ${reasonText}`, {
+          duration: 6000,
+          description: 'Bạn sẽ được chuyển về trang danh sách phòng.',
+        });
+        setTimeout(() => router.push('/rooms'), 3000);
+      } else if (!amIHost) {
+        // User bình thường nhận thông báo
+        toast.info('Phiên live đã kết thúc.', {
+          description:
+            stoppedByRole === 'admin'
+              ? `Phiên đã bị Admin dừng. Bạn sẽ được chuyển về danh sách phòng.`
+              : 'Host đã dừng phiên. Bạn sẽ được chuyển về danh sách phòng.',
+          duration: 4000,
+        });
+        setTimeout(() => router.push('/rooms'), 1500);
+      } else {
+        // Host tự dừng (stoppedByRole === 'host') — redirect ngay, đã biết việc mình làm
+        router.push('/rooms');
+      }
+    }
+  );
 
   const viewers = useMemo(() => {
     if (!socketMembers) return [];
     return socketMembers.filter((m) => m.username !== room?.host?.username);
   }, [socketMembers, room?.host?.username]);
 
-  // Load room by slug
+  // Load room by slug (secondary — chỉ chạy để cập nhật host info khi user thay đổi)
   useEffect(() => {
     if (!params.slug) return;
+    if (isRoomEnded.current) return; // Phòng đã kết thúc, không fetch nữa
     getRoomBySlug(params.slug)
       .then((data) => {
         setRoom(data);
         if (user && data?.host?.username === user.username) setIsHost(true);
       })
-      .catch(() => {});
+      .catch(() => {}); // 404 khi phòng bị xóa — im lặng
   }, [params.slug, user]);
 
   // Determine host
@@ -247,6 +314,27 @@ export default function CommunityRoomPage({
     } finally {
       // Host cũng redirect về /rooms
       router.push('/rooms');
+    }
+  };
+
+  // Admin: Dừng phiên live từ chế độ giám sát
+  const handleEndRoomAsAdmin = () => {
+    if (!room) return;
+    setIsEndRoomModalOpen(true);
+  };
+
+  const confirmEndRoomAsAdmin = async () => {
+    if (!room) return;
+    try {
+      socket?.emit('endRoom', { roomId: room.id, reason: endRoomReason });
+      await terminateRoom(room.id, endRoomReason);
+      toast.success('Đã dừng phiên live vì vi phạm thành công!');
+    } catch (err) {
+      console.error('Admin end room error:', err);
+      toast.error('Không thể dừng phiên live');
+    } finally {
+      setIsEndRoomModalOpen(false);
+      router.push('/admin');
     }
   };
 
@@ -369,46 +457,89 @@ export default function CommunityRoomPage({
           <h1 className="text-sm font-bold text-white">
             {loading ? 'Đang tải...' : room?.title || 'Phòng Cộng Đồng'}
           </h1>
-          <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
-            Community
-          </span>
+          {isMonitorMode ? (
+            <span className="flex items-center gap-1 rounded-md bg-orange-500/20 px-2 py-0.5 text-[10px] font-bold text-orange-400 uppercase">
+              <MonitorPlay size={10} /> Giám sát
+            </span>
+          ) : (
+            <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
+              Community
+            </span>
+          )}
         </Link>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/10">
-            <Share2 size={14} /> Chia sẻ
-          </button>
-          <button
-            onClick={handleSync}
-            disabled={isSyncing}
-            className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
-          >
-            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-            <div className="flex flex-col items-start leading-tight">
-              <span>
-                {isSyncing
-                  ? 'Đang đồng bộ...'
-                  : syncDone
-                    ? 'Đã đồng bộ!'
-                    : 'Đồng bộ với Host'}
-              </span>
-              {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
-                <span
-                  className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
-                >
-                  Lệch: {timeOffset > 0 ? '+' : ''}
-                  {timeOffset.toFixed(1)}s
-                </span>
-              )}
-            </div>
-          </button>
-          <button
-            onClick={() => setIsLeaveModalOpen(true)}
-            className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30"
-          >
-            <LogOut size={14} /> {isHost ? 'Kết thúc phòng' : 'Rời phòng'}
-          </button>
+          {/* Nút Dừng phiên live — chỉ hiện khi admin đang giám sát */}
+          {isMonitorMode && (
+            <button
+              onClick={handleEndRoomAsAdmin}
+              className="flex items-center gap-2 rounded-full bg-red-500 px-4 py-1.5 text-xs font-black text-white shadow-lg shadow-red-500/30 transition-all hover:scale-105 hover:bg-red-600"
+            >
+              <StopCircle size={14} /> Dừng phiên live
+            </button>
+          )}
+          {/* Nút Back về Admin */}
+          {isMonitorMode && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/10"
+            >
+              <ShieldAlert size={14} /> Admin
+            </Link>
+          )}
+          {/* Các nút bình thường — ẩn khi giám sát */}
+          {!isMonitorMode && (
+            <>
+              <button className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/10">
+                <Share2 size={14} /> Chia sẻ
+              </button>
+              <button
+                onClick={handleSync}
+                disabled={isSyncing}
+                className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
+              >
+                <RefreshCw
+                  size={14}
+                  className={isSyncing ? 'animate-spin' : ''}
+                />
+                <div className="flex flex-col items-start leading-tight">
+                  <span>
+                    {isSyncing
+                      ? 'Đang đồng bộ...'
+                      : syncDone
+                        ? 'Đã đồng bộ!'
+                        : 'Đồng bộ với Host'}
+                  </span>
+                  {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
+                    <span
+                      className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
+                    >
+                      Lệch: {timeOffset > 0 ? '+' : ''}
+                      {timeOffset.toFixed(1)}s
+                    </span>
+                  )}
+                </div>
+              </button>
+              <button
+                onClick={() => setIsLeaveModalOpen(true)}
+                className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30"
+              >
+                <LogOut size={14} /> {isHost ? 'Kết thúc phòng' : 'Rời phòng'}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Monitor Mode Banner */}
+      {isMonitorMode && (
+        <div className="flex h-8 flex-shrink-0 items-center gap-2 border-b border-orange-500/20 bg-orange-500/5 px-6">
+          <ShieldAlert size={12} className="text-orange-400" />
+          <span className="text-[11px] font-bold text-orange-400">
+            Chế độ Giám sát Admin — Bạn đang theo dõi phòng này. Click vào tin
+            nhắn để xoá hoặc cấm chat.
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
         {/* LEFT SIDEBAR: Discovery & Settings */}
@@ -841,7 +972,19 @@ export default function CommunityRoomPage({
                       </div>
                     ) : (
                       <div
-                        className={`flex items-start gap-3 ${msg.username === user?.username ? 'flex-row-reverse' : 'flex-row'}`}
+                        className={`group relative flex items-start gap-3 ${msg.username === user?.username ? 'flex-row-reverse' : 'flex-row'}`}
+                        onClick={(e) => {
+                          // Chỉ admin hoặc host mới có quyền
+                          if (!isAdmin && !isHost) return;
+                          // Không thể tự cấm/xóa tin nhắn của chính mình
+                          if (msg.username === user?.username) return;
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            messageId: msg.id,
+                            messageUsername: msg.username,
+                          });
+                        }}
                       >
                         <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full shadow-lg">
                           {msg.avatarUrl ? (
@@ -872,6 +1015,14 @@ export default function CommunityRoomPage({
                               {msg.username}
                               {msg.username === user?.username && ' (Bạn)'}
                             </span>
+                            {/* Badge muted - chỉ admin/host thấy */}
+                            {(isAdmin || isHost) &&
+                              mutedUsers[msg.username] &&
+                              Date.now() < mutedUsers[msg.username] && (
+                                <span className="flex items-center gap-0.5 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-400">
+                                  🔇 Cấm chat
+                                </span>
+                              )}
                           </div>
                           <div
                             className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${
@@ -1124,6 +1275,96 @@ export default function CommunityRoomPage({
         )}
       </AnimatePresence>
 
+      {/* End Room Reason Modal (Admin) */}
+      <AnimatePresence>
+        {isEndRoomModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsEndRoomModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="glass relative w-full max-w-md overflow-hidden rounded-[32px] border border-red-500/30 bg-[#121214] p-8 shadow-2xl shadow-red-900/20"
+            >
+              <div className="mb-4 flex justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                  <ShieldAlert size={32} />
+                </div>
+              </div>
+              <h3 className="mb-2 text-center text-xl font-bold text-white">
+                Dừng phiên live
+              </h3>
+              <p className="mb-6 text-center text-sm leading-relaxed text-white/60">
+                Vui lòng chọn lý do dừng phiên live của phòng "{room?.title}".
+                Người xem sẽ bị đưa ra ngoài ngay lập tức.
+              </p>
+
+              <div className="mb-6 flex flex-col gap-2">
+                {[
+                  'Vi phạm bản quyền',
+                  'Nội dung bạo lực, máu me, đánh nhau',
+                  'Nội dung 18+',
+                  'Livestream cờ bạc, cá độ',
+                  'Chửi bới cực đoan',
+                  'Lý do khác',
+                ].map((reason) => (
+                  <label
+                    key={reason}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all ${
+                      endRoomReason === reason
+                        ? 'border-red-500 bg-red-500/10'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    <div
+                      className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                        endRoomReason === reason
+                          ? 'border-red-500'
+                          : 'border-white/40'
+                      }`}
+                    >
+                      {endRoomReason === reason && (
+                        <div className="h-2 w-2 rounded-full bg-red-500" />
+                      )}
+                    </div>
+                    <span className="text-sm text-white/90">{reason}</span>
+                    <input
+                      type="radio"
+                      name="endRoomReason"
+                      value={reason}
+                      checked={endRoomReason === reason}
+                      onChange={(e) => setEndRoomReason(e.target.value)}
+                      className="hidden"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={confirmEndRoomAsAdmin}
+                  className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
+                >
+                  Xác nhận dừng phiên live
+                </button>
+                <button
+                  onClick={() => setIsEndRoomModalOpen(false)}
+                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Hủy
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Image Viewer Modal */}
       <AnimatePresence>
         {selectedImage && (
@@ -1154,6 +1395,198 @@ export default function CommunityRoomPage({
               />
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Admin Context Menu ────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {contextMenu && (
+          <>
+            {/* Backdrop đóng menu khi click ra ngoài */}
+            <div
+              className="fixed inset-0 z-[300]"
+              onClick={() => setContextMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setContextMenu(null);
+              }}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -6 }}
+              transition={{ duration: 0.12 }}
+              style={{ top: contextMenu.y, left: contextMenu.x }}
+              className="fixed z-[301] min-w-[190px] overflow-hidden rounded-xl border border-white/10 bg-[#1a1a2e]/95 shadow-2xl shadow-black/60 backdrop-blur-xl"
+            >
+              {/* Header */}
+              <div className="border-b border-white/10 px-3 py-2">
+                <p className="text-[10px] font-bold tracking-widest text-white/30 uppercase">
+                  Quản lý tin nhắn
+                </p>
+                <p className="mt-0.5 text-[11px] font-semibold text-white/60">
+                  @{contextMenu.messageUsername}
+                </p>
+              </div>
+
+              {/* Xóa tin nhắn */}
+              <button
+                onClick={() => {
+                  deleteMessage(contextMenu.messageId);
+                  setContextMenu(null);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-red-400 transition-colors hover:bg-red-500/10"
+              >
+                <span className="text-base">🗑️</span>
+                Xóa tin nhắn này
+              </button>
+
+              {/* Cấm chat - chỉ hiện nếu không phải tin nhắn của chính mình */}
+              {contextMenu.messageUsername !== user?.username && (
+                <>
+                  <div className="mx-3 border-t border-white/5" />
+                  {mutedUsers[contextMenu.messageUsername] &&
+                  Date.now() < mutedUsers[contextMenu.messageUsername] ? (
+                    <button
+                      onClick={() => {
+                        unmuteChatUser(contextMenu.messageUsername);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-green-400 transition-colors hover:bg-green-500/10"
+                    >
+                      <span className="text-base">🔊</span>
+                      Bỏ cấm chat
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setMuteDialog({
+                          username: contextMenu.messageUsername,
+                        });
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] text-orange-400 transition-colors hover:bg-orange-500/10"
+                    >
+                      <span className="text-base">🔇</span>
+                      Cấm chat
+                    </button>
+                  )}
+                </>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Mute Duration Dialog ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {muteDialog && (
+          <div className="fixed inset-0 z-[400] flex items-center justify-center">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMuteDialog(null)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="relative z-[401] w-80 overflow-hidden rounded-2xl border border-white/10 bg-[#1a1a2e] shadow-2xl"
+            >
+              {/* Header */}
+              <div className="border-b border-white/10 bg-[#C800DF]/10 p-4">
+                <h3 className="text-[15px] font-bold text-white">
+                  🔇 Cấm chat
+                </h3>
+                <p className="mt-1 text-[12px] text-white/50">
+                  Chọn thời gian cấm cho{' '}
+                  <span className="font-bold text-orange-400">
+                    @{muteDialog.username}
+                  </span>
+                </p>
+              </div>
+
+              {/* Các lựa chọn thời gian */}
+              <div className="grid grid-cols-2 gap-2 p-4">
+                {[
+                  {
+                    label: '5 phút',
+                    minutes: 5,
+                    color:
+                      'from-yellow-500/20 to-yellow-600/10 border-yellow-500/30 text-yellow-400',
+                  },
+                  {
+                    label: '10 phút',
+                    minutes: 10,
+                    color:
+                      'from-orange-500/20 to-orange-600/10 border-orange-500/30 text-orange-400',
+                  },
+                  {
+                    label: '30 phút',
+                    minutes: 30,
+                    color:
+                      'from-red-500/20 to-red-600/10 border-red-500/30 text-red-400',
+                  },
+                  {
+                    label: '1 tiếng',
+                    minutes: 60,
+                    color:
+                      'from-red-700/30 to-red-800/20 border-red-700/40 text-red-300',
+                  },
+                ].map(({ label, minutes, color }) => (
+                  <button
+                    key={minutes}
+                    onClick={() => {
+                      muteChatUser(muteDialog.username, minutes);
+                      setMuteDialog(null);
+                    }}
+                    className={`rounded-xl border bg-gradient-to-br ${color} flex flex-col items-center justify-center gap-1 p-3 font-bold transition-all hover:scale-105 hover:shadow-lg`}
+                  >
+                    <span className="text-[22px]">⏱️</span>
+                    <span className="text-[13px]">{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="px-4 pb-4">
+                <button
+                  onClick={() => setMuteDialog(null)}
+                  className="w-full rounded-xl border border-white/10 py-2 text-[13px] text-white/50 transition-colors hover:bg-white/5"
+                >
+                  Huỷ
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Toast thông báo bị mute (chỉ user bị cấm thấy) ──────────────── */}
+      <AnimatePresence>
+        {chatMuteInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: 60 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 60 }}
+            className="fixed bottom-24 left-1/2 z-[350] -translate-x-1/2"
+          >
+            <div className="flex items-center gap-3 rounded-2xl border border-red-500/30 bg-[#1a1a2e]/95 px-4 py-3 shadow-2xl shadow-red-900/40 backdrop-blur-xl">
+              <span className="text-2xl">🔇</span>
+              <div>
+                <p className="text-[13px] font-bold text-red-400">
+                  Bạn đang bị cấm chat
+                </p>
+                <p className="text-[11px] text-white/50">
+                  Còn {chatMuteInfo.remainingMinutes} phút · Cấm bởi{' '}
+                  <span className="text-white/80">@{chatMuteInfo.mutedBy}</span>
+                </p>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </main>
