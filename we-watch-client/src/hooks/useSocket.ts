@@ -60,6 +60,17 @@ export const useSocket = (
   onRoomEnded?: () => void
 ) => {
   const socketRef = useRef<Socket | null>(null);
+  const joinAudioRef = useRef<HTMLAudioElement | null>(null);
+  const leaveAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Khởi tạo audio objects
+    joinAudioRef.current = new Audio('/join.wav');
+    leaveAudioRef.current = new Audio('/out.wav');
+    
+    if (joinAudioRef.current) joinAudioRef.current.volume = 0.5;
+    if (leaveAudioRef.current) leaveAudioRef.current.volume = 0.5;
+  }, []);
 
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -110,6 +121,9 @@ export const useSocket = (
     });
 
     socket.on('userJoined', (member: RoomMember) => {
+      // Phát tiếng vào phòng
+      joinAudioRef.current?.play().catch(() => {});
+      
       setMembers((prev) => {
         if (prev.find((m) => m.username === member.username)) return prev;
         return [...prev, member];
@@ -117,6 +131,9 @@ export const useSocket = (
     });
 
     socket.on('userLeft', (username: string) => {
+      // Phát tiếng rời phòng
+      leaveAudioRef.current?.play().catch(() => {});
+
       setMembers((prev) => prev.filter((m) => m.username !== username));
     });
 

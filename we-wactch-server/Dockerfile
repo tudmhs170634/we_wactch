@@ -13,7 +13,7 @@ RUN npm install
 COPY . .
 
 # Generate Prisma client and build
-RUN npx prisma generate
+RUN npx prisma generate --schema prisma/schema
 RUN npm run build
 
 # Production stage
