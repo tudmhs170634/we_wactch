@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - client-server
+      - trungnt
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -11,9 +12,9 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.KEY }}
+          host: ${{ vars.HOST }}
+          username: ${{ vars.USERNAME }}
+          key: ${{ vars.KEY }}
           script: |
             export PATH=$PATH:/usr/local/bin
             cd ~/we_wactch
