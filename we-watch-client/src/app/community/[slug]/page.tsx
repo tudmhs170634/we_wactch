@@ -118,6 +118,9 @@ export default function CommunityRoomPage({
     wishlistError,
     sendMessage,
     sendEmoji,
+    addVideoToWishlist,
+    removeVideoFromWishlist,
+    playVideoFromWishlist,
     socketError,
     currentHostId,
     setCurrentHostId,
@@ -693,12 +696,12 @@ export default function CommunityRoomPage({
             </div>
           </div>
 
-          {/* Chat Messages */}
+          {/* Chat Messages / History */}
           {!room ? (
             <div className="flex flex-1 flex-col items-center justify-center opacity-40">
               <Loader2 className="animate-spin text-[#C800DF]" size={24} />
               <span className="mt-3 text-xs font-black tracking-widest uppercase">
-                Đang tải cuộc trò chuyện...
+                Đang tải dữ liệu...
               </span>
             </div>
           ) : (

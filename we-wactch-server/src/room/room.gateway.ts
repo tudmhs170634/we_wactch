@@ -569,7 +569,6 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
         // 2. Nếu phòng chưa có video hoặc video hiện tại đã bị xóa/không hợp lệ -> Phát luôn
         if (!currentRoom || !currentRoom.videoId) {
-            this.logger.log(`Room ${roomId} is empty or not found. Auto-playing video ${video.id}`);
             
             // Cập nhật Database
             await this.prisma.room.update({
@@ -584,7 +583,7 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
             this.server.to(roomId).emit('videoChanged', {
                 videoId: video.id,
                 title: video.title,
-                videoUrl: (video as any).videoUrl, // Nếu có truyền kèm
+                videoUrl: (video as any).videoUrl,
                 thumbnailUrl: video.thumbnailUrl
             });
 
@@ -655,6 +654,73 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         }
 
         this.server.to(roomId).emit('wishlistUpdated', filtered);
+    }
+
+    @SubscribeMessage('playVideoFromWishlist')
+    async handlePlayVideoFromWishlist(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { roomId: string; videoId: string },
+    ) {
+        const { roomId, videoId } = data;
+        const info = this.socketRoomMap.get(client.id);
+        if (!info) return;
+
+        // 1. Kiểm tra quyền Host (Chỉ Host mới có quyền chuyển phim)
+        const room = await this.prisma.room.findUnique({
+            where: { id: roomId },
+            include: { host: true }
+        });
+        if (!room || room.hostId !== info.userId) {
+            client.emit('error', 'Chỉ chủ phòng mới có quyền chuyển phim.');
+            return;
+        }
+
+        // 2. Lấy thông tin video từ wishlist trong Redis
+        const wishlistKey = ROOM_WISHLIST_KEY(roomId);
+        const existing = await this.redis.lrange<WishlistVideo>(wishlistKey, 0, -1);
+        const videoToPlay = existing.find(v => v.id === videoId);
+        
+        if (!videoToPlay) {
+            client.emit('error', 'Không tìm thấy phim trong hàng chờ.');
+            return;
+        }
+
+        // 3. Cập nhật Database
+        await this.prisma.room.update({
+            where: { id: roomId },
+            data: { videoId: videoToPlay.id }
+        });
+
+        // 4. Xóa phim này khỏi wishlist
+        const filtered = existing.filter(v => v.id !== videoId);
+        await this.redis.del(wishlistKey);
+        for (let i = filtered.length - 1; i >= 0; i--) {
+            await this.redis.lpush(wishlistKey, filtered[i], MAX_WISHLIST_ITEMS);
+        }
+        await this.redis.expire(wishlistKey, WISHLIST_TTL);
+
+        // 5. Xóa trạng thái video cũ trong Redis để bắt đầu từ 0
+        await this.redis.del(ROOM_VIDEO_STATE_KEY(roomId));
+
+        // 6. Thông báo cho mọi người
+        this.server.to(roomId).emit('videoChanged', {
+            videoId: videoToPlay.id,
+            title: videoToPlay.title,
+            thumbnailUrl: videoToPlay.thumbnailUrl
+        });
+        this.server.to(roomId).emit('wishlistUpdated', filtered);
+
+        const systemMsg: ChatMessage = {
+            id: `sys_play_${Date.now()}`,
+            roomId,
+            username: 'system',
+            message: `${info.username} đã bắt đầu phát: ${videoToPlay.title}`,
+            type: 'status',
+            timestamp: Date.now(),
+        };
+        this.server.to(roomId).emit('newMessage', systemMsg);
+        
+        this.logger.log(`Host ${info.username} started playing video ${videoId} from wishlist in room ${roomId}`);
     }
 
     private async notifyRoomsList(roomId: string) {

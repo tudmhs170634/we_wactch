@@ -60,12 +60,14 @@ export default function WeWatchRoomPage({
   const [syncDone, setSyncDone] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [chatInput, setChatInput] = useState('');
+  const [isHostCamOn, setIsHostCamOn] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [visibleStatusIds, setVisibleStatusIds] = useState<Set<string>>(
     new Set()
   );
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [selectedQueueVideo, setSelectedQueueVideo] = useState<any>(null);
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   const [room, setRoom] = useState<any>(null);
@@ -86,6 +88,7 @@ export default function WeWatchRoomPage({
     sendEmoji,
     addVideoToWishlist,
     removeVideoFromWishlist,
+    playVideoFromWishlist,
     socketError,
     currentHostId,
     setCurrentHostId,
@@ -567,9 +570,10 @@ export default function WeWatchRoomPage({
                   {socketWishlist.map((vid) => (
                     <div
                       key={vid.id}
+                      onClick={() => setSelectedQueueVideo(vid)}
                       className="group relative flex cursor-pointer flex-col gap-2 rounded-xl p-2 transition-all hover:bg-white/5"
                     >
-                      <div className="relative h-20 w-full overflow-hidden rounded-lg">
+                      <div className="relative h-24 w-full overflow-hidden rounded-lg">
                         <Image
                           src={vid.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
                           alt={vid.title}
@@ -577,30 +581,24 @@ export default function WeWatchRoomPage({
                           unoptimized
                           className="object-cover"
                         />
-                        <div className="absolute right-1 bottom-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
-                          {vid.duration
-                            ? Math.floor(vid.duration / 60) + 'm'
-                            : '--'}
-                        </div>
-                        {isHost && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeVideoFromWishlist(vid.id);
-                            }}
-                            className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500/80 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                          >
-                            <X size={10} />
-                          </button>
-                        )}
+                        {/* Remove Button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeVideoFromWishlist(vid.id);
+                          }}
+                          className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/80"
+                        >
+                          <UserMinus size={12} />
+                        </button>
                       </div>
-                      <div>
-                        <span className="line-clamp-1 text-xs font-bold text-white">
+                      <div className="px-1">
+                        <h4 className="line-clamp-1 text-xs font-bold text-white/90">
                           {vid.title}
-                        </span>
-                        <span className="text-[10px] text-white/30">
+                        </h4>
+                        <p className="text-[10px] text-white/30">
                           bởi {vid.addedBy}
-                        </span>
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -838,11 +836,12 @@ export default function WeWatchRoomPage({
             </AnimatePresence>
           </div>
 
+          {/* Chat Messages / History */}
           {!room ? (
             <div className="flex flex-1 flex-col items-center justify-center opacity-40">
               <Loader2 className="animate-spin text-[#C800DF]" size={24} />
               <span className="mt-3 text-xs font-black tracking-widest uppercase">
-                Đang tải cuộc trò chuyện...
+                Đang tải dữ liệu...
               </span>
             </div>
           ) : (
@@ -1016,6 +1015,71 @@ export default function WeWatchRoomPage({
                   className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
                 >
                   Ở lại
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Queue Video Confirmation Popup */}
+      <AnimatePresence>
+        {selectedQueueVideo && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setSelectedQueueVideo(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[#1A1A1D] shadow-2xl"
+            >
+              {/* Thumbnail */}
+              <div className="relative aspect-video w-full overflow-hidden">
+                <Image
+                  src={selectedQueueVideo.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
+                  alt={selectedQueueVideo.title}
+                  fill
+                  unoptimized
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A1D] via-transparent to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <h3 className="line-clamp-2 text-sm font-bold text-white">
+                    {selectedQueueVideo.title}
+                  </h3>
+                  <p className="mt-1 text-[11px] text-white/50">
+                    Thêm bởi: {selectedQueueVideo.addedBy}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2 p-4">
+                {isHost ? (
+                  <button
+                    onClick={() => {
+                      playVideoFromWishlist(selectedQueueVideo.id);
+                      setSelectedQueueVideo(null);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#C800DF] py-3 text-sm font-bold text-white transition-all hover:bg-[#a000b3] active:scale-95"
+                  >
+                    <Play size={16} fill="currentColor" />
+                    Phát ngay
+                  </button>
+                ) : (
+                  <p className="text-center text-xs text-white/40 italic">
+                    Chỉ chủ phòng mới có thể chuyển phim
+                  </p>
+                )}
+                <button
+                  onClick={() => setSelectedQueueVideo(null)}
+                  className="w-full rounded-xl bg-white/5 py-3 text-sm font-bold text-white/60 transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Đóng
                 </button>
               </div>
             </motion.div>
