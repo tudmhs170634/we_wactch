@@ -51,3 +51,4 @@ testem.log
 .env.test
 .env.production
 .env.local
+tmp_videos/

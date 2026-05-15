@@ -73,4 +73,37 @@ export class S3Service {
   getPublicUrl(key: string): string {
     return `${this.cdnUrl}/${key}`;
   }
+
+  async downloadFile(key: string, destPath: string): Promise<void> {
+    const { createWriteStream } = await import('fs');
+    const { pipeline } = await import('stream/promises');
+
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+    const response = await this.client.send(command);
+    if (!response.Body) throw new Error('Empty response body');
+
+    const writeStream = createWriteStream(destPath);
+    await pipeline(response.Body as any, writeStream);
+  }
+
+  async uploadFile(
+    key: string,
+    filePath: string,
+    contentType: string,
+  ): Promise<string> {
+    const { createReadStream } = await import('fs');
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: createReadStream(filePath),
+      ContentType: contentType,
+      ACL: 'public-read',
+    });
+    await this.client.send(command);
+    return `${this.cdnUrl}/${key}`;
+  }
 }

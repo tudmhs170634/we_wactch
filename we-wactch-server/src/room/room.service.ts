@@ -247,10 +247,26 @@ export class RoomService {
     return updated;
   }
 
-  async remove(id: string, userId: string, userRole?: string) {
+  async remove(id: string, userId: string, userRole?: string, reason?: string) {
     const room = await this.findOne(id);
     if (room.hostId !== userId && userRole !== 'admin') {
       throw new ForbiddenException('Chỉ chủ phòng hoặc admin mới có quyền xóa.');
+    }
+
+    // Nếu là admin và có lý do, lưu vào bảng báo cáo vi phạm
+    if (userRole === 'admin' && reason) {
+      const admin = await this.prisma.user.findUnique({ where: { id: userId } });
+      await this.prisma.violationReport.create({
+        data: {
+          roomId: room.id,
+          roomTitle: room.title,
+          hostId: room.hostId || '',
+          hostName: room.host?.username || 'Unknown',
+          reason: reason,
+          adminId: userId,
+          adminName: admin?.username || 'Admin',
+        },
+      });
     }
 
     await this.prisma.room.delete({ where: { id } });

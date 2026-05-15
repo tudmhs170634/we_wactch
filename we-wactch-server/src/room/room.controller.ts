@@ -77,10 +77,21 @@ export class RoomController {
     return this.roomService.update(id, user.userId, dto, user.role);
   }
 
-  /** DELETE /rooms/:id — Xóa phòng (chỉ host) */
+  /** DELETE /rooms/:id — Xóa phòng (chủ host hoặc admin) */
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   remove(@Param('id') id: string, @GetUser() user: any) {
     return this.roomService.remove(id, user.userId, user.role);
+  }
+
+  /** POST /rooms/:id/terminate — Dừng phòng vì vi phạm (chỉ admin) */
+  @Post(':id/terminate')
+  @UseGuards(JwtAuthGuard)
+  terminate(
+    @Param('id') id: string,
+    @GetUser() user: any,
+    @Body('reason') reason: string,
+  ) {
+    return this.roomService.remove(id, user.userId, user.role, reason);
   }
 }

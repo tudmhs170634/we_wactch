@@ -1,0 +1,14 @@
+model ViolationReport {
+  id        String   @id @default(uuid()) @db.Uuid
+  roomId    String   @db.Uuid
+  roomTitle String
+  hostId    String   @db.Uuid
+  hostName  String
+  reason    String
+  adminId   String   @db.Uuid
+  adminName String
+  createdAt DateTime @default(now())
+
+  @@index([hostId])
+  @@index([adminId])
+}

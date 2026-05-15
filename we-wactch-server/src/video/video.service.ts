@@ -45,7 +45,57 @@ export class VideoService {
     });
     // Xóa cache list sau khi tạo mới
     await this.redis.del(VIDEO_LIST_KEY(1, 12), VIDEO_LIST_KEY(1, 50));
+
+    // Chạy faststart optimization bất đồng bộ (không chờ)
+    this.processVideoFaststart(video.id, video.videoKey).catch((err) => {
+      this.logger.error(`Faststart failed for video ${video.id}: ${err.message}`);
+    });
+
     return video;
+  }
+
+  /**
+   * Tải video từ S3 → Pure JS faststart → Upload lại
+   * Chạy background, không ảnh hưởng UX
+   * Không cần cài FFmpeg
+   */
+  private async processVideoFaststart(videoId: string, videoKey: string) {
+    const { mkdirSync, unlinkSync, existsSync } = await import('fs');
+    const { join } = await import('path');
+    const { mp4Faststart } = await import('../utils/mp4-faststart.js');
+
+    const tmpDir = join(process.cwd(), 'tmp_videos');
+    if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
+
+    const inputPath = join(tmpDir, `${videoId}_input.mp4`);
+    const outputPath = join(tmpDir, `${videoId}_faststart.mp4`);
+
+    try {
+      // 1. Download từ S3
+      this.logger.log(`[Faststart] Downloading video ${videoId}...`);
+      await this.s3.downloadFile(videoKey, inputPath);
+
+      // 2. Pure JS faststart (di chuyển moov atom, không re-encode)
+      this.logger.log(`[Faststart] Processing video ${videoId}...`);
+      const success = await mp4Faststart(inputPath, outputPath);
+
+      if (!success) {
+        this.logger.warn(`[Faststart] Could not process video ${videoId}`);
+        return;
+      }
+
+      // 3. Upload lại lên S3 (cùng key, ghi đè file cũ)
+      this.logger.log(`[Faststart] Uploading optimized video ${videoId}...`);
+      await this.s3.uploadFile(videoKey, outputPath, 'video/mp4');
+
+      this.logger.log(`[Faststart] ✅ Video ${videoId} optimized successfully`);
+    } catch (err: any) {
+      this.logger.error(`[Faststart] ❌ Error: ${err.message}`);
+    } finally {
+      // 4. Dọn file tạm
+      try { unlinkSync(inputPath); } catch {}
+      try { unlinkSync(outputPath); } catch {}
+    }
   }
 
   async findAll(page = 1, limit = 12, search?: string) {
