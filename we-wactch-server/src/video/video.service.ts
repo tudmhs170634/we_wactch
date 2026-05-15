@@ -62,7 +62,7 @@ export class VideoService {
   private async processVideoFaststart(videoId: string, videoKey: string) {
     const { mkdirSync, unlinkSync, existsSync } = await import('fs');
     const { join } = await import('path');
-    const { mp4Faststart } = await import('../utils/mp4-faststart');
+    const { mp4Faststart } = await import('../utils/mp4-faststart.js');
 
     const tmpDir = join(process.cwd(), 'tmp_videos');
     if (!existsSync(tmpDir)) mkdirSync(tmpDir, { recursive: true });
