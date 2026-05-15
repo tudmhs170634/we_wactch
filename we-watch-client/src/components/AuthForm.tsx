@@ -101,7 +101,8 @@ const AuthForm: React.FC<AuthFormProps> = ({
 
         const destination =
           res.user.role === 'admin' ? '/admin' : callbackUrl || '/';
-        router.push(destination);
+        // Use window.location.href to ensure full URL with query params (e.g. ?subGroup=) is preserved
+        window.location.href = destination;
       } else {
         const res = await register({ email, username, password, avatarUrl });
         console.log('Register response:', res);

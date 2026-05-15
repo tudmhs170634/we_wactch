@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, use, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useSocket } from '@/src/hooks/useSocket';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import { MOCK_VIDEOS, MOCK_ROOMS } from '@/src/constants/mockData';
@@ -17,6 +18,18 @@ import {
 import api from '@/src/lib/axios';
 import VideoPlayer from '@/src/components/videos/VideoPlayer';
 import {
+  LiveKitProvider,
+  LiveKitCameraView,
+  LiveKitScreenView,
+  LiveKitControls,
+  MiniRoomView,
+  SubGroupRoom,
+  SubGroupView,
+  SubGroupMicToggle,
+} from '@/src/components/rooms/LiveKitRoom';
+import { useTracks } from '@livekit/components-react';
+import { Track } from 'livekit-client';
+import {
   Play,
   Pause,
   Volume2,
@@ -25,12 +38,15 @@ import {
   Smile,
   Heart,
   ThumbsUp,
+  ThumbsUp as ThumbsUpIcon,
   Flame,
   Users,
   Share2,
   LogOut,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Image as ImageIcon,
   Mic,
   MicOff,
@@ -46,6 +62,7 @@ import {
   RefreshCw,
   FileImage,
   X,
+  Search,
   MonitorPlay,
   ShieldAlert,
   StopCircle,
@@ -53,6 +70,166 @@ import {
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import { ConfirmationModal } from '@/src/components/rooms/ConfirmationModal';
+
+// --- HELPER COMPONENTS ---
+function ScreenShareTracker({
+  onStateChange,
+}: {
+  onStateChange: (active: boolean) => void;
+}) {
+  const tracks = useTracks([
+    { source: Track.Source.ScreenShare, withPlaceholder: false },
+  ]);
+  const isActive = tracks.length > 0;
+
+  useEffect(() => {
+    onStateChange(isActive);
+  }, [isActive, onStateChange]);
+
+  return null;
+}
+
+function OfflinePlaceholder({
+  visible,
+  room,
+  hasToken,
+}: {
+  visible: boolean;
+  room: any;
+  hasToken: boolean;
+}) {
+  return (
+    <>
+      {hasToken ? (
+        <OfflineContentWithLiveKit room={room} />
+      ) : (
+        <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden">
+          {/* Background Blur */}
+          {room?.video?.thumbnailUrl && (
+            <div
+              className="absolute inset-0 z-0 bg-cover bg-center opacity-30 blur-2xl transition-all duration-1000"
+              style={{ backgroundImage: `url(${room.video.thumbnailUrl})` }}
+            />
+          )}
+          <div className="absolute inset-0 z-10 bg-gradient-to-b from-transparent via-black/40 to-black/80" />
+
+          {/* Content */}
+          <div className="relative z-20 flex flex-col items-center gap-6 px-8 text-center">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5 }}
+              className="relative"
+            >
+              <div className="absolute -inset-4 animate-pulse rounded-full bg-[#C800DF]/20 blur-xl" />
+              <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-md">
+                <VideoOff size={32} className="text-white/40" />
+              </div>
+            </motion.div>
+
+            <div className="flex flex-col gap-2">
+              <motion.h3
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="text-xl font-black tracking-tight text-white"
+              >
+                Host chưa bắt đầu live
+              </motion.h3>
+              <motion.p
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.3 }}
+                className="max-w-[300px] text-sm leading-relaxed font-medium text-white/50"
+              >
+                Nội dung livestream chưa bắt đầu hoặc đã kết thúc. Hãy quay lại
+                sau nhé!
+              </motion.p>
+            </div>
+
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="mt-4 flex items-center gap-2 rounded-full border border-white/5 bg-white/5 px-4 py-2 text-[10px] font-bold tracking-widest text-white/30 uppercase"
+            >
+              <Loader2 size={12} className="animate-spin" />
+              Đang chờ tín hiệu...
+            </motion.div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function OfflineContentWithLiveKit({ room }: { room: any }) {
+  const tracks = useTracks([
+    { source: Track.Source.ScreenShare, withPlaceholder: false },
+  ]);
+  const isScreenSharing = tracks.length > 0;
+
+  if (isScreenSharing || room?.video?.streamUrl) return null;
+
+  return (
+    <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden">
+      {/* Background Blur */}
+      {room?.video?.thumbnailUrl && (
+        <div
+          className="absolute inset-0 z-0 bg-cover bg-center opacity-30 blur-2xl transition-all duration-1000"
+          style={{ backgroundImage: `url(${room.video.thumbnailUrl})` }}
+        />
+      )}
+      <div className="absolute inset-0 z-10 bg-gradient-to-b from-transparent via-black/40 to-black/80" />
+
+      {/* Content */}
+      <div className="relative z-20 flex flex-col items-center gap-6 px-8 text-center">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          className="relative"
+        >
+          <div className="absolute -inset-4 animate-pulse rounded-full bg-[#C800DF]/20 blur-xl" />
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur-md">
+            <VideoOff size={32} className="text-white/40" />
+          </div>
+        </motion.div>
+
+        <div className="flex flex-col gap-2">
+          <motion.h3
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="text-xl font-black tracking-tight text-white"
+          >
+            Host chưa bắt đầu live
+          </motion.h3>
+          <motion.p
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="max-w-[300px] text-sm leading-relaxed font-medium text-white/50"
+          >
+            Nội dung livestream chưa bắt đầu hoặc đã kết thúc. Hãy quay lại sau
+            nhé!
+          </motion.p>
+        </div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="mt-4 flex items-center gap-2 rounded-full border border-white/5 bg-white/5 px-4 py-2 text-[10px] font-bold tracking-widest text-white/30 uppercase"
+        >
+          <Loader2 size={12} className="animate-spin" />
+          Đang chờ tín hiệu...
+        </motion.div>
+      </div>
+    </div>
+  );
+}
 
 export default function CommunityRoomPage({
   params: paramsPromise,
@@ -64,6 +241,7 @@ export default function CommunityRoomPage({
   const isMonitorMode = searchParams.get('monitor') === 'true';
   const { user } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   // Flag ngăn các API call sau khi phòng đã kết thúc
   const isRoomEnded = useRef(false);
 
@@ -106,6 +284,7 @@ export default function CommunityRoomPage({
     };
     fetchRoom();
   }, [params.slug]);
+
   const [chatInput, setChatInput] = useState('');
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
@@ -113,7 +292,7 @@ export default function CommunityRoomPage({
 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
-  const [isHost, setIsHost] = useState(false); // Sẽ được tính lại sau khi có room + user
+  const [isHost, setIsHost] = useState(false);
   const [isHostMicOn, setIsHostMicOn] = useState(true);
   const [isHostCamOn, setIsHostCamOn] = useState(true);
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
@@ -123,6 +302,13 @@ export default function CommunityRoomPage({
   const [timeOffset, setTimeOffset] = useState(0);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [isEndRoomModalOpen, setIsEndRoomModalOpen] = useState(false);
+  const [liveKitToken, setLiveKitToken] = useState<string>('');
+
+  // Sub-group state
+  const [subGroupId, setSubGroupId] = useState<string>('');
+  const [subGroupToken, setSubGroupToken] = useState<string>('');
+  const [subGroupRoomName, setSubGroupRoomName] = useState<string>('');
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
   const [endRoomReason, setEndRoomReason] = useState('Vi phạm bản quyền');
 
   // --- Admin Chat Moderation States ---
@@ -163,6 +349,7 @@ export default function CommunityRoomPage({
   }, []);
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const memberScrollRef = useRef<HTMLDivElement>(null);
 
   const {
     socket,
@@ -184,6 +371,13 @@ export default function CommunityRoomPage({
     videoChangeTrigger,
     videoState,
     requestVideoSync,
+    hostMediaState,
+    updateHostMediaState,
+    kickMember,
+  } = useSocket(room?.id, user, undefined, () => {
+    toast.info('Phòng đã được kết thúc bởi chủ phòng');
+    router.push('/rooms');
+  });
     mutedUsers,
     chatMuteInfo,
     deleteMessage,
@@ -230,6 +424,11 @@ export default function CommunityRoomPage({
     return socketMembers.filter((m) => m.username !== room?.host?.username);
   }, [socketMembers, room?.host?.username]);
 
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
   // Load room by slug (secondary — chỉ chạy để cập nhật host info khi user thay đổi)
   useEffect(() => {
     if (!params.slug) return;
@@ -242,35 +441,32 @@ export default function CommunityRoomPage({
       .catch(() => {}); // 404 khi phòng bị xóa — im lặng
   }, [params.slug, user]);
 
-  // Determine host
+  // ─── AUTH REDIRECT ───
+  useEffect(() => {
+    // Only redirect if hydration is complete and user is explicitly null
+    if (isHydrated && user === null) {
+      const sp = searchParams.toString();
+      const fullPath = window.location.pathname + (sp ? `?${sp}` : '');
+      console.log('Redirecting to login. Full path detected:', fullPath);
+      window.location.href = `/login?callbackUrl=${encodeURIComponent(fullPath)}`;
+    }
+  }, [user, isHydrated, searchParams]);
+
+  // ─── DETERMINE HOST ───
   useEffect(() => {
     if (room && user) {
       const effectiveHostId = currentHostId || room.hostId || room.host?.id;
-      setIsHost(
-        effectiveHostId === user.id || room.host?.username === user.username
-      );
+      const isActuallyHost =
+        effectiveHostId === user.id || room.host?.username === user.username;
+      setIsHost(isActuallyHost);
 
       if (!currentHostId && (room.hostId || room.host?.id)) {
         setCurrentHostId(room.hostId || room.host?.id);
       }
-
-      // Final security check once room/user is loaded
-      const isAdmin = user.role === 'admin';
-      const authFlag = sessionStorage.getItem(`ww_auth_${params.slug}`);
-
-      if (
-        effectiveHostId !== user.id &&
-        room.host?.username !== user.username &&
-        !isAdmin &&
-        !authFlag
-      ) {
-        toast.error('Bạn chỉ có thể tham gia phòng từ danh sách phòng chiếu.');
-        router.push('/rooms');
-      }
     }
-  }, [room, user, currentHostId, setCurrentHostId, params.slug, router]);
+  }, [room, user, currentHostId, setCurrentHostId]);
 
-  // Handle disappearing status messages in Chat tab
+  // Status message visibility
   useEffect(() => {
     const lastMsg = messages[messages.length - 1];
     if (lastMsg?.type === 'status') {
@@ -286,12 +482,34 @@ export default function CommunityRoomPage({
     }
   }, [messages]);
 
-  // Tính isHost thật dựa trên user đang đăng nhập vs host của phòng
+  // Fetch LiveKit Token
   useEffect(() => {
-    if (room && user) {
-      setIsHost(room.host?.username === user.username);
+    if (room) {
+      const fetchLKToken = async () => {
+        try {
+          const res = await api.get(`/livekit/token?roomName=${room.id}`);
+          setLiveKitToken(res.data.token);
+        } catch (err) {
+          console.error('Failed to fetch LiveKit token:', err);
+        }
+      };
+      fetchLKToken();
     }
-  }, [room, user]);
+  }, [room]);
+
+  // Sync host media state
+  useEffect(() => {
+    if (isHost) {
+      updateHostMediaState(isHostMicOn, isHostCamOn);
+    }
+  }, [isHostMicOn, isHostCamOn, isHost, updateHostMediaState]);
+
+  useEffect(() => {
+    if (!isHost && hostMediaState) {
+      setIsHostMicOn(hostMediaState.mic);
+      setIsHostCamOn(hostMediaState.cam);
+    }
+  }, [hostMediaState, isHost]);
 
   const handleLeaveRoom = () => {
     if (!room || !user) return;
@@ -299,24 +517,40 @@ export default function CommunityRoomPage({
     router.push('/rooms');
   };
 
+  const [kickTarget, setKickTarget] = useState<string | null>(null);
+  const [isSubGroupLeaveModalOpen, setIsSubGroupLeaveModalOpen] =
+    useState(false);
+
+  const handleLeaveSubGroup = () => {
+    setSubGroupToken('');
+    setSubGroupId('');
+    setSubGroupRoomName('');
+    // Clean up session storage
+    if (room?.id) {
+      const keys = Object.keys(sessionStorage);
+      keys.forEach((key) => {
+        if (key.startsWith(`ww_sg_${room.id}`)) {
+          sessionStorage.removeItem(key);
+        }
+      });
+    }
+    // Remove subGroup from URL
+    const newUrl = window.location.pathname;
+    window.history.replaceState({}, '', newUrl);
+    toast.success('Đã rời khỏi sub-group');
+  };
+
   const handleEndRoom = async () => {
     if (!room || !user) return;
-    if (
-      !window.confirm(
-        'Bạn có chắc muốn kết thúc phòng? Tất cả người xem sẽ bị đưa ra ngoài.'
-      )
-    )
-      return;
     try {
-      // Notify tất cả người trong phòng trước
       socket?.emit('endRoom', { roomId: room.id });
-      // Xóa phòng trên server
       await deleteRoom(room.id);
+      setIsEndRoomModalOpen(false);
+      router.push('/rooms');
+      toast.success('Đã kết thúc phòng thành công');
     } catch (err) {
       console.error('End room error:', err);
-    } finally {
-      // Host cũng redirect về /rooms
-      router.push('/rooms');
+      toast.error('Có lỗi xảy ra khi kết thúc phòng');
     }
   };
 
@@ -355,21 +589,16 @@ export default function CommunityRoomPage({
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const formData = new FormData();
     formData.append('file', file);
-
     setIsUploading(true);
     try {
       const res = await api.post('/upload/image', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      if (res.data.url) {
-        sendMessage(res.data.url);
-      }
+      if (res.data.url) sendMessage(res.data.url);
     } catch (err) {
       toast.error('Không thể tải ảnh lên. Vui lòng thử lại.');
-      console.error(err);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -378,41 +607,31 @@ export default function CommunityRoomPage({
 
   const fetchGifs = async (query = '') => {
     try {
-      const apiKey = 'LIVDSRZULELA';
-      const provider = 'tenor';
-
-      let endpoint = '';
-      if (provider === 'tenor') {
-        endpoint = query
-          ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${apiKey}&limit=20`
-          : `https://tenor.googleapis.com/v2/featured?key=${apiKey}&limit=20`;
-      } else {
-        endpoint = query
-          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(query)}&limit=20&rating=g`
-          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=20&rating=g`;
-      }
+      const apiKey = process.env.NEXT_PUBLIC_GIF_API_KEY || 'LIVDSRZULELA';
+      const provider = process.env.NEXT_PUBLIC_GIF_PROVIDER || 'tenor';
+      let endpoint =
+        provider === 'tenor'
+          ? `https://tenor.googleapis.com/v2/${query ? 'search?q=' + encodeURIComponent(query) : 'featured?'}key=${apiKey}&limit=20`
+          : `https://api.giphy.com/v1/gifs/${query ? 'search?q=' + encodeURIComponent(query) : 'trending?'}api_key=${apiKey}&limit=20&rating=g`;
 
       const res = await fetch(endpoint);
       const data = await res.json();
-
-      let formattedGifs = [];
-      if (provider === 'tenor') {
-        formattedGifs = (data.results || []).map((g: any) => ({
-          id: g.id,
-          images: {
-            fixed_height_small: { url: g.media_formats.tinygif.url },
-            original: { url: g.media_formats.gif.url },
-          },
-        }));
-      } else {
-        formattedGifs = (data.data || []).map((g: any) => ({
-          id: g.id,
-          images: {
-            fixed_height_small: { url: g.images.fixed_height_small.url },
-            original: { url: g.images.original.url },
-          },
-        }));
-      }
+      const formattedGifs =
+        provider === 'tenor'
+          ? (data.results || []).map((g: any) => ({
+              id: g.id,
+              images: {
+                fixed_height_small: { url: g.media_formats.tinygif.url },
+                original: { url: g.media_formats.gif.url },
+              },
+            }))
+          : (data.data || []).map((g: any) => ({
+              id: g.id,
+              images: {
+                fixed_height_small: { url: g.images.fixed_height_small.url },
+                original: { url: g.images.original.url },
+              },
+            }));
       setGifs(formattedGifs);
     } catch (err) {
       console.error('Fetch GIFs error:', err);
@@ -420,9 +639,7 @@ export default function CommunityRoomPage({
   };
 
   useEffect(() => {
-    if (isGifPickerOpen) {
-      fetchGifs(gifSearch);
-    }
+    if (isGifPickerOpen) fetchGifs(gifSearch);
   }, [isGifPickerOpen, gifSearch]);
 
   const onEmojiClick = (emojiData: any) => {
@@ -430,27 +647,97 @@ export default function CommunityRoomPage({
     setIsEmojiPickerOpen(false);
   };
 
-  const handleSync = () => {
-    setIsSyncing(true);
-    requestVideoSync();
-    setTimeout(() => {
-      setIsSyncing(false);
-      setSyncDone(true);
-      setTimeout(() => setSyncDone(false), 2000);
-    }, 1000);
+  const scrollMembers = (direction: 'left' | 'right') => {
+    if (memberScrollRef.current) {
+      const amount = 100;
+      memberScrollRef.current.scrollBy({
+        left: direction === 'left' ? -amount : amount,
+        behavior: 'smooth',
+      });
+    }
   };
 
-  const handleKick = (name: string) => {
-    alert(`Đã kích ${name} khỏi phòng cộng đồng!`);
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href);
+    toast.success('Đã sao chép liên kết tham gia!');
   };
 
-  const handleShareScreen = () => {
-    alert('Bắt đầu chia sẻ màn hình...');
+  // Auto-join sub-group from URL param (?subGroup=uuid)
+  useEffect(() => {
+    if (!room || !user) return;
+    const sgId = searchParams.get('subGroup');
+    if (!sgId) return;
+    // Restore from sessionStorage if we already have a token for this subgroup
+    const stored = sessionStorage.getItem(`ww_sg_${room.id}_${sgId}`);
+    if (stored) {
+      const { token, roomName } = JSON.parse(stored);
+      setSubGroupId(sgId);
+      setSubGroupToken(token);
+      setSubGroupRoomName(roomName);
+      return;
+    }
+    // Fetch fresh token
+    api
+      .get(`/livekit/subgroup-token?roomId=${room.id}&subGroupId=${sgId}`)
+      .then((res) => {
+        setSubGroupId(sgId);
+        setSubGroupToken(res.data.token);
+        setSubGroupRoomName(res.data.subRoomName);
+        sessionStorage.setItem(
+          `ww_sg_${room.id}_${sgId}`,
+          JSON.stringify({
+            token: res.data.token,
+            roomName: res.data.subRoomName,
+          })
+        );
+        // Set the auth flag so security check passes
+        sessionStorage.setItem(`ww_auth_${params.slug}`, '1');
+      })
+      .catch((err) => console.error('Sub-group token error:', err));
+  }, [room, user, searchParams, params.slug]);
+
+  const handleInvite = async () => {
+    if (!room) return;
+
+    // If already in a sub-group, just copy the current link
+    if (subGroupId) {
+      const inviteUrl = `${window.location.origin}/community/${params.slug}?subGroup=${subGroupId}`;
+      navigator.clipboard.writeText(inviteUrl);
+      toast.success('Đã sao chép link mời bạn bè vào nhóm hiện tại!');
+      return;
+    }
+
+    setIsGeneratingInvite(true);
+    try {
+      // Generate a new UUID for this sub-group
+      const newId = crypto.randomUUID();
+      const res = await api.get(
+        `/livekit/subgroup-token?roomId=${room.id}&subGroupId=${newId}`
+      );
+      setSubGroupId(newId);
+      setSubGroupToken(res.data.token);
+      setSubGroupRoomName(res.data.subRoomName);
+      sessionStorage.setItem(
+        `ww_sg_${room.id}_${newId}`,
+        JSON.stringify({
+          token: res.data.token,
+          roomName: res.data.subRoomName,
+        })
+      );
+      // Build invite link with subGroup param
+      const inviteUrl = `${window.location.origin}/community/${params.slug}?subGroup=${newId}`;
+      navigator.clipboard.writeText(inviteUrl);
+      toast.success('Đã sao chép link mời bạn bè!');
+    } catch (err) {
+      toast.error('Không thể tạo link mời. Vui lòng thử lại.');
+    } finally {
+      setIsGeneratingInvite(false);
+    }
   };
 
   return (
     <main className="scrollbar-hide flex h-screen w-screen flex-col overflow-auto bg-[#0A0A0B] font-sans text-slate-100">
-      {/* CUSTOM ROOM HEADER */}
+      {/* HEADER */}
       <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-white/5 bg-white/5 px-6">
         <Link href="/" className="flex items-center gap-4">
           <span className="font-sans text-lg font-black tracking-tighter text-white">
@@ -471,6 +758,34 @@ export default function CommunityRoomPage({
           )}
         </Link>
         <div className="flex items-center gap-3">
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-1.5 text-xs font-bold text-white hover:bg-white/10"
+          >
+            <Share2 size={14} /> Chia sẻ
+          </button>
+          <button
+            onClick={() =>
+              isHost ? setIsEndRoomModalOpen(true) : setIsLeaveModalOpen(true)
+            }
+            className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 hover:bg-red-500/30"
+          >
+            <LogOut size={14} /> {isHost ? 'Kết thúc phòng' : 'Rời phòng'}
+          </button>
+        </div>
+      </div>
+
+      <LiveKitProvider
+        roomName={room?.id || params.slug}
+        token={liveKitToken}
+        onDisconnect={() => setLiveKitToken('')}
+        video={isHost}
+        audio={isHost}
+      >
+        <div className="flex flex-1 gap-4 overflow-hidden p-4">
+          {/* LEFT SIDEBAR */}
+          <div className="flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden">
+            <div className="glass relative flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
           {/* Nút Dừng phiên live — chỉ hiện khi admin đang giám sát */}
           {isMonitorMode && (
             <button
@@ -663,289 +978,409 @@ export default function CommunityRoomPage({
             >
               <div
                 className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 hover:bg-white/5"
-                onClick={() => setIsInviteOpen(!isInviteOpen)}
+                onClick={() => setIsParticipantsOpen(!isParticipantsOpen)}
               >
-                <div className="flex items-center gap-2">
-                  <UserPlus size={16} className="text-[#00E5FF]" />
-                  <h3 className="text-sm font-bold tracking-wider text-white uppercase">
-                    Mời bạn bè
-                  </h3>
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold tracking-tighter text-white uppercase">
+                    Thành viên
+                  </span>
+                  <div className="flex items-center gap-1.5 text-xs text-green-400">
+                    <div className="h-1.5 w-1.5 rounded-full bg-green-400"></div>
+                    {socketMembers.length} online
+                  </div>
                 </div>
-                {isInviteOpen ? (
-                  <ChevronUp size={16} />
-                ) : (
-                  <ChevronDown size={16} />
-                )}
+                <div className="rounded-lg border border-white/10 p-1 text-white/60">
+                  {isParticipantsOpen ? (
+                    <ChevronUp size={16} />
+                  ) : (
+                    <ChevronDown size={16} />
+                  )}
+                </div>
               </div>
               <AnimatePresence initial={false}>
-                {isInviteOpen && (
+                {isParticipantsOpen && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: 'auto', opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="flex flex-col gap-4 p-4"
+                    className="overflow-hidden"
                   >
-                    <p className="text-[11px] font-bold text-white/40">
-                      Vui lòng mời bạn bè tham gia thông qua danh sách phòng
-                      chiếu tại trang chủ.
-                    </p>
+                    <div className="scrollbar-hide flex max-h-[300px] flex-col gap-3 overflow-y-auto p-4">
+                      {room?.host && (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="relative h-8 w-8 overflow-hidden rounded-full border border-[#C800DF]">
+                              {room.host.avatarUrl ? (
+                                <Image
+                                  src={room.host.avatarUrl}
+                                  alt={room.host.username}
+                                  fill
+                                  unoptimized
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-[#C800DF]/20 text-xs font-bold text-[#C800DF]">
+                                  {room.host.username?.[0]?.toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-sm font-bold text-white">
+                              {room.host.username}
+                            </span>
+                          </div>
+                          <span className="rounded-full border border-[#C800DF] px-2 py-0.5 text-[10px] font-bold text-[#C800DF]">
+                            Host
+                          </span>
+                        </div>
+                      )}
+                      {viewers.map((m, idx) => (
+                        <div
+                          key={m.username || idx}
+                          className="group flex items-center justify-between"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="relative h-8 w-8 overflow-hidden rounded-full opacity-80">
+                              {m.avatarUrl ? (
+                                <Image
+                                  src={m.avatarUrl}
+                                  alt={m.username}
+                                  fill
+                                  unoptimized
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white/60">
+                                  {m.username?.[0]?.toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-sm font-medium text-white/70">
+                              {m.username}
+                              {m.username === user?.username && ' (Bạn)'}
+                            </span>
+                          </div>
+                          {isHost && m.username !== user?.username && (
+                            <button
+                              onClick={() => setKickTarget(m.username)}
+                              className="p-1 text-red-500/60 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500"
+                              title="Mời ra khỏi phòng"
+                            >
+                              <UserMinus size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-          )}
 
-          {/* Live Room Settings (Host only) */}
-          {isHost && (
-            <div
-              className={`glass flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5 transition-all duration-300 ${isSettingsOpen ? 'h-fit min-h-[140px]' : 'h-fit flex-none'}`}
-            >
+            {/* SUB-GROUP PANEL (For Viewers) */}
+            {!isHost && (
               <div
-                className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 hover:bg-white/5"
-                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                className={`glass flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5 transition-all duration-300 ${isInviteOpen ? 'flex-1' : 'h-fit flex-none'}`}
               >
-                <div className="flex items-center gap-2">
-                  <Settings size={16} className="text-[#C800DF]" />
-                  <h3 className="text-sm font-bold tracking-wider text-white uppercase">
-                    Cài đặt Live
-                  </h3>
-                </div>
-                {isSettingsOpen ? (
-                  <ChevronUp size={16} />
-                ) : (
-                  <ChevronDown size={16} />
-                )}
-              </div>
-              <AnimatePresence initial={false}>
-                {isSettingsOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="flex flex-col gap-3 p-4"
+                {subGroupToken ? (
+                  /* Wrap the entire panel in ONE SubGroupRoom so all hook-users share context */
+                  <SubGroupRoom
+                    subRoomName={subGroupRoomName}
+                    token={subGroupToken}
+                    onDisconnect={() => {
+                      setSubGroupToken('');
+                      setSubGroupId('');
+                      setSubGroupRoomName('');
+                    }}
                   >
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">
-                        Chế độ phòng
-                      </span>
-                      <Select<'community' | 'age_limit'>
-                        value={'community'}
-                        onChange={() => {}}
-                        options={[
-                          { value: 'community', label: 'Cộng đồng (Mặc định)' },
-                          { value: 'age_limit', label: 'Giới hạn độ tuổi' },
-                        ]}
-                        buttonClassName="rounded-lg px-3 py-2 text-xs font-bold"
-                        menuClassName="rounded-lg"
-                        optionClassName="text-xs"
-                        disabled
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-xs font-medium text-white/60">
-                      <span>Phê duyệt chat</span>
-                      <div className="flex h-4 w-8 justify-end rounded-full bg-[#C800DF] p-0.5">
-                        <div className="h-3 w-3 rounded-full bg-white shadow-sm"></div>
+                    {/* Header with mic toggle */}
+                    <div
+                      className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 hover:bg-white/5"
+                      onClick={() => setIsInviteOpen(!isInviteOpen)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
+                        <h3 className="text-sm font-bold tracking-wider text-white uppercase">
+                          Sub-group
+                        </h3>
+                      </div>
+                      <div
+                        className="flex items-center gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <SubGroupMicToggle />
+                        <button
+                          onClick={() => setIsSubGroupLeaveModalOpen(true)}
+                          className="flex h-6 w-6 items-center justify-center rounded-full bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                          title="Rời sub-group"
+                        >
+                          <LogOut size={12} />
+                        </button>
+                        {isInviteOpen ? (
+                          <ChevronUp size={16} className="text-white/40" />
+                        ) : (
+                          <ChevronDown size={16} className="text-white/40" />
+                        )}
                       </div>
                     </div>
-                  </motion.div>
+                    <AnimatePresence initial={false}>
+                      {isInviteOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="flex flex-col gap-4 p-4"
+                        >
+                          <SubGroupView
+                            memberAvatars={Object.fromEntries(
+                              socketMembers
+                                .filter((m) => m.username && m.avatarUrl)
+                                .map((m) => [m.username, m.avatarUrl])
+                            )}
+                          />
+                          <button
+                            onClick={handleInvite}
+                            className="flex items-center justify-center gap-1.5 rounded-xl border border-white/5 py-2 text-[10px] font-bold text-white/30 hover:text-white/60"
+                          >
+                            <Copy size={10} /> Sao chép link mời thêm bạn
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </SubGroupRoom>
+                ) : (
+                  /* No sub-group – show invite prompt */
+                  <>
+                    <div
+                      className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 hover:bg-white/5"
+                      onClick={() => setIsInviteOpen(!isInviteOpen)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 rounded-full bg-white/20" />
+                        <h3 className="text-sm font-bold tracking-wider text-white uppercase">
+                          Mời bạn cùng xem
+                        </h3>
+                      </div>
+                      {isInviteOpen ? (
+                        <ChevronUp size={16} />
+                      ) : (
+                        <ChevronDown size={16} />
+                      )}
+                    </div>
+                    <AnimatePresence initial={false}>
+                      {isInviteOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="flex flex-col items-center gap-3 p-4 py-6"
+                        >
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#00E5FF]/10">
+                            <UserPlus size={20} className="text-[#00E5FF]" />
+                          </div>
+                          <p className="text-center text-[11px] font-bold text-white/40">
+                            Tạo phòng riêng với bạn bè để trò chuyện giọng nói
+                            trong khi xem
+                          </p>
+                          <button
+                            onClick={handleInvite}
+                            disabled={isGeneratingInvite}
+                            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#00E5FF]/15 py-2.5 text-xs font-bold text-[#00E5FF] transition-all hover:bg-[#00E5FF]/25 disabled:opacity-50"
+                          >
+                            {isGeneratingInvite ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <UserPlus size={14} />
+                            )}
+                            {isGeneratingInvite
+                              ? 'Đang tạo link...'
+                              : 'Mời bạn bè & Tạo sub-group'}
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </>
                 )}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
-
-        {/* CENTER COLUMN: Video + Share Screen */}
-        <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-          {/* Video Player Section */}
-          <div className="group relative flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl">
-            {streamUrl ? (
-              <VideoPlayer src={streamUrl} poster={room?.video?.thumbnailUrl} />
-            ) : room?.video ? (
-              <div className="flex h-full w-full animate-pulse items-center justify-center bg-white/5">
-                <span className="font-bold text-white/40">
-                  Đang tải video...
-                </span>
               </div>
-            ) : (
-              <Image
-                src={room?.image || MOCK_VIDEOS[0].backdrop}
-                alt="Banner"
-                fill
-                unoptimized
-                className="object-cover opacity-80"
-              />
             )}
 
-            {/* Top Left Status */}
-            <div className="pointer-events-none absolute top-4 left-4 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 backdrop-blur-md">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
-              </span>
-              <span className="text-xs font-bold text-white">Live</span>
-              <span className="mx-1 h-3 w-px bg-white/20"></span>
-              <Users size={12} className="text-white/60" />
-              <span className="text-xs font-bold text-white">
-                {viewers.length}
-              </span>
-            </div>
+            {isHost && (
+              <div className="glass flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
+                <div
+                  className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 hover:bg-white/5"
+                  onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                >
+                  <div className="flex items-center gap-2">
+                    <Settings size={16} className="text-[#C800DF]" />
+                    <h3 className="text-sm font-bold tracking-wider text-white uppercase">
+                      Cài đặt Live
+                    </h3>
+                  </div>
+                  {isSettingsOpen ? (
+                    <ChevronUp size={16} />
+                  ) : (
+                    <ChevronDown size={16} />
+                  )}
+                </div>
+                <AnimatePresence initial={false}>
+                  {isSettingsOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="flex flex-col gap-3 p-4"
+                    >
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">
+                          Chế độ phòng
+                        </span>
+                        <Select<'community'>
+                          value={'community'}
+                          onChange={() => {}}
+                          options={[{ value: 'community', label: 'Cộng đồng' }]}
+                          buttonClassName="rounded-lg px-3 py-2 text-xs font-bold"
+                          disabled
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs font-medium text-white/60">
+                        <span>Phê duyệt chat</span>
+                        <div className="flex h-4 w-8 justify-end rounded-full bg-[#C800DF] p-0.5">
+                          <div className="h-3 w-3 rounded-full bg-white shadow-sm"></div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
 
-          {/* Share Screen Button (Host View) */}
-          <div className="glass flex h-16 flex-shrink-0 items-center justify-center rounded-[20px] border border-white/10 bg-white/5 p-3">
-            {isHost ? (
-              <button
-                onClick={handleShareScreen}
-                className="flex items-center gap-2 rounded-xl bg-white/5 px-6 py-2.5 text-sm font-black tracking-widest text-white uppercase transition-all hover:bg-[#C800DF] hover:shadow-[0_0_20px_rgba(200,0,223,0.3)] active:scale-95"
-              >
-                <ScreenShare size={18} />
-                Chia sẻ màn hình
-              </button>
-            ) : (
+          {/* CENTER COLUMN */}
+          <div className="flex flex-1 flex-col gap-4 overflow-hidden">
+            <div className="group relative flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl">
+              {liveKitToken && (
+                <>
+                  <LiveKitScreenView />
+                  <ScreenShareTracker onStateChange={() => {}} />
+                </>
+              )}
+
+              <OfflinePlaceholder
+                visible={!room?.video?.streamUrl && !liveKitToken}
+                room={room}
+                hasToken={!!liveKitToken}
+              />
+
+              {room?.video?.streamUrl && (
+                <div className="absolute inset-0 z-0">
+                  <VideoPlayer
+                    src={room.video.streamUrl}
+                    poster={room.video.thumbnailUrl}
+                    onAction={sendVideoAction}
+                    lastAction={lastVideoAction}
+                    initialState={videoState}
+                    onOffsetChange={setTimeOffset}
+                  />
+                </div>
+              )}
+
+              <div className="pointer-events-none absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 backdrop-blur-md">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+                </span>
+                <span className="text-xs font-bold text-white">Live</span>
+                <Users size={12} className="text-white/60" />
+                <span className="text-xs font-bold text-white">
+                  {socketMembers.length}
+                </span>
+              </div>
+            </div>
+
+            {/* Member Bubbles */}
+            <div className="glass flex h-16 flex-shrink-0 items-center justify-center gap-4 rounded-[20px] border border-white/10 bg-white/5 p-3">
               <div className="flex items-center gap-3">
-                <div className="flex -space-x-2">
-                  {[1, 2, 3].map((i) => (
+                <button
+                  onClick={() => scrollMembers('left')}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/40 hover:bg-white/10 hover:text-white"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <div
+                  ref={memberScrollRef}
+                  className="scrollbar-hide flex w-48 -space-x-3 overflow-x-hidden py-1 sm:w-64"
+                >
+                  {socketMembers.map((m, idx) => (
                     <div
-                      key={i}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#0A0A0B] bg-white/10 text-[10px] font-bold"
+                      key={m.username || idx}
+                      className="group relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border-2 border-[#12121A] bg-white/10 shadow-xl transition-transform hover:z-10 hover:scale-110"
                     >
-                      +{i}
+                      {m.avatarUrl ? (
+                        <Image
+                          src={m.avatarUrl}
+                          alt={m.username}
+                          fill
+                          unoptimized
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-xs font-black text-white/60">
+                          {m.username?.[0]?.toUpperCase()}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
-                <span className="text-xs font-bold text-white/60">
-                  Và {Math.max(0, socketMembers.length - 3)} người khác đang xem
-                </span>
+                <button
+                  onClick={() => scrollMembers('right')}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white/40 hover:bg-white/10 hover:text-white"
+                >
+                  <ChevronRight size={16} />
+                </button>
               </div>
-            )}
-          </div>
-
-          {/* MAIN PLAYER AREA */}
-          <div className="glass relative flex-1 overflow-hidden rounded-[32px] border border-white/10 bg-black/60 shadow-2xl">
-            {room?.video?.streamUrl ? (
-              <VideoPlayer
-                src={room.video.streamUrl}
-                poster={room.video.thumbnailUrl}
-                onAction={sendVideoAction}
-                lastAction={lastVideoAction}
-                initialState={videoState}
-                onOffsetChange={setTimeOffset}
-              />
-            ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-white/5">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/5 text-[#C800DF]">
-                  <Play size={40} fill="currentColor" className="ml-1" />
-                </div>
-                <div className="text-center">
-                  <h3 className="text-lg font-bold text-white">
-                    Chưa có video
-                  </h3>
-                  <p className="text-sm text-white/40">
-                    Vui lòng chọn phim từ thư viện để bắt đầu
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Chat Only */}
-        <div className="glass relative flex w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
-          {/* Host Video Section (Top of Right Sidebar) */}
-          <div className="relative aspect-video w-full overflow-hidden border-b border-white/5 bg-black/40">
-            {isHostCamOn ? (
-              <Image
-                src="https://i.pravatar.cc/400?u=1"
-                alt="Host Video"
-                fill
-                unoptimized
-                className="object-cover"
-              />
-            ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-white/5">
-                <div className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-white/10 shadow-2xl">
-                  <Image
-                    src="https://i.pravatar.cc/150?u=1"
-                    alt="Host Avatar"
-                    fill
-                    unoptimized
-                    className="object-cover grayscale"
-                  />
-                </div>
-                <span className="text-[10px] font-bold tracking-widest text-white/20 uppercase">
-                  Camera Off
-                </span>
-              </div>
-            )}
-
-            {/* Host Name Badge */}
-            <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-black/60 px-2 py-1 backdrop-blur-md">
-              <div className="h-1.5 w-1.5 rounded-full bg-[#C800DF]"></div>
-              <span className="text-[10px] font-bold text-white">
-                Host: {room?.host?.username || 'Đang tải...'}
+              <div className="mx-2 h-6 w-px bg-white/10"></div>
+              <span className="text-xs font-bold text-white/40">
+                {socketMembers.length} người đang tham gia
               </span>
             </div>
-
-            {/* Host Controls (Only visible to Host) */}
-            {isHost ? (
-              <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                <button
-                  onClick={() => setIsHostMicOn(!isHostMicOn)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full transition-all ${isHostMicOn ? 'bg-white/10 text-white' : 'bg-red-500 text-white'}`}
-                >
-                  {isHostMicOn ? <Mic size={14} /> : <MicOff size={14} />}
-                </button>
-                <button
-                  onClick={() => setIsHostCamOn(!isHostCamOn)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full transition-all ${isHostCamOn ? 'bg-white/10 text-white' : 'bg-red-500 text-white'}`}
-                >
-                  {isHostCamOn ? <Video size={14} /> : <VideoOff size={14} />}
-                </button>
-              </div>
-            ) : (
-              /* Viewer View Status Icons */
-              <div className="absolute right-3 bottom-3 flex items-center gap-2">
-                <div
-                  className={`flex h-6 w-6 items-center justify-center rounded-full bg-black/40 ${!isHostMicOn ? 'text-red-400' : 'text-white/60'}`}
-                >
-                  {isHostMicOn ? <Mic size={10} /> : <MicOff size={10} />}
-                </div>
-                <div
-                  className={`flex h-6 w-6 items-center justify-center rounded-full bg-black/40 ${!isHostCamOn ? 'text-red-400' : 'text-white/60'}`}
-                >
-                  {isHostCamOn ? <Video size={10} /> : <VideoOff size={10} />}
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Chat Header with Tabs */}
-          <div className="flex items-center justify-between border-b border-white/5 p-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`text-sm font-bold tracking-tighter uppercase transition-colors ${
-                  activeTab === 'chat' ? 'text-white' : 'text-white/20'
-                }`}
-              >
-                Trò chuyện
-              </button>
-              <div className="h-4 w-px bg-white/10"></div>
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`text-sm font-bold tracking-tighter uppercase transition-colors ${
-                  activeTab === 'history' ? 'text-white' : 'text-white/20'
-                }`}
-              >
-                Lịch sử
-              </button>
+          {/* RIGHT COLUMN */}
+          <div className="glass relative flex w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
+            <div className="relative aspect-video w-full overflow-hidden border-b border-white/5 bg-black/40">
+              {liveKitToken ? (
+                <LiveKitCameraView />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs text-white/20 italic">
+                  Đang chuẩn bị...
+                </div>
+              )}
+              <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-black/60 px-2 py-1 backdrop-blur-md">
+                <div className="h-1.5 w-1.5 rounded-full bg-[#C800DF]"></div>
+                <span className="text-[10px] font-bold text-white">
+                  Host: {room?.host?.username || 'Đang tải...'}
+                </span>
+              </div>
+              {liveKitToken && (
+                <LiveKitControls isHost={isHost} mode="community" />
+              )}
             </div>
-            <div className="flex gap-3 text-white/40">
-              <Volume2 size={16} className="cursor-pointer hover:text-white" />
-              <Maximize size={16} className="cursor-pointer hover:text-white" />
-            </div>
-          </div>
 
+            <div className="flex items-center justify-between border-b border-white/5 p-4">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  className={`text-sm font-bold tracking-tighter uppercase ${activeTab === 'chat' ? 'text-white' : 'text-white/20'}`}
+                >
+                  Trò chuyện
+                </button>
+                <div className="h-4 w-px bg-white/10"></div>
+                <button
+                  onClick={() => setActiveTab('history')}
+                  className={`text-sm font-bold tracking-tighter uppercase ${activeTab === 'history' ? 'text-white' : 'text-white/20'}`}
+                >
+                  Lịch sử
+                </button>
+              </div>
           {/* Chat Messages / History */}
           {!room ? (
             <div className="flex flex-1 flex-col items-center justify-center opacity-40">
@@ -954,7 +1389,7 @@ export default function CommunityRoomPage({
                 Đang tải dữ liệu...
               </span>
             </div>
-          ) : (
+
             <div
               ref={chatScrollRef}
               className="scrollbar-hide flex-1 space-y-4 overflow-y-auto p-4"
@@ -969,7 +1404,7 @@ export default function CommunityRoomPage({
                   <React.Fragment key={msg.id}>
                     {msg.type === 'status' ? (
                       <div className="flex w-full justify-center px-4 py-2">
-                        <span className="line-clamp-1 max-w-[90%] text-center text-[12px] font-bold tracking-tight text-white/30 italic">
+                        <span className="text-center text-[12px] font-bold text-white/30 italic">
                           {msg.message}
                         </span>
                       </div>
@@ -1007,6 +1442,12 @@ export default function CommunityRoomPage({
                         <div
                           className={`flex flex-col ${msg.username === user?.username ? 'items-end' : 'items-start'}`}
                         >
+                          <span
+                            className={`text-[10px] font-black uppercase ${msg.username === room?.host?.username ? 'text-[#C800DF]' : 'text-white/40'}`}
+                          >
+                            {msg.username}
+                            {msg.username === user?.username && ' (Bạn)'}
+                          </span>
                           <div className="flex items-center gap-2">
                             <span
                               className={`text-[10px] font-black tracking-tighter uppercase ${
@@ -1028,27 +1469,16 @@ export default function CommunityRoomPage({
                               )}
                           </div>
                           <div
-                            className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${
-                              msg.username === user?.username
-                                ? 'rounded-2xl rounded-tr-none border border-[#C800DF]/20 bg-[#C800DF]/20 text-white shadow-[0_0_10px_rgba(200,0,223,0.1)]'
-                                : 'text-white/90'
-                            }`}
+                            className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${msg.username === user?.username ? 'rounded-2xl rounded-tr-none bg-[#C800DF]/20 text-white' : 'text-white/90'}`}
                           >
                             {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
-                            msg.message.includes('cloudinary.com') ||
-                            msg.message.includes('giphy.com') ||
-                            msg.message.includes('tenor.com') ? (
-                              <div
-                                className="relative mt-1 cursor-zoom-in overflow-hidden rounded-lg transition-opacity hover:opacity-90"
+                            msg.message.includes('cloudinary.com') ? (
+                              <img
+                                src={msg.message}
+                                alt="media"
+                                className="max-h-60 rounded-lg"
                                 onClick={() => setSelectedImage(msg.message)}
-                              >
-                                <img
-                                  src={msg.message}
-                                  alt="Chat media"
-                                  className="max-h-60 w-full object-contain"
-                                  loading="lazy"
-                                />
-                              </div>
+                              />
                             ) : (
                               msg.message
                             )}
@@ -1059,139 +1489,66 @@ export default function CommunityRoomPage({
                   </React.Fragment>
                 ))}
             </div>
-          )}
 
-          {/* Floating Emojis Layer */}
-          <div className="pointer-events-none absolute top-32 right-0 bottom-32 left-0 overflow-hidden">
-            <AnimatePresence>
-              {emojis.map((e) => (
-                <motion.div
-                  key={e.localId}
-                  initial={{ opacity: 1, y: 100, x: `${e.x}%`, scale: 0.5 }}
-                  animate={{ opacity: 0, y: -100, x: `${e.x}%`, scale: 1.5 }}
-                  transition={{ duration: 4.5, ease: 'easeOut' }}
-                  className="absolute bottom-0 text-2xl"
-                >
-                  {e.emoji}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-
-          {/* Chat Input & Reactions */}
-          <div
-            className="border-t border-white/5 bg-black/20 p-4"
-            ref={chatContainerRef}
-          >
-            <div className="mb-3 flex items-center justify-center gap-5">
-              <button
-                onClick={() => spawnEmoji('❤️')}
-                className="text-red-400 transition-transform hover:scale-150"
-              >
-                <Heart size={20} fill="currentColor" />
-              </button>
-              <button
-                onClick={() => spawnEmoji('👍')}
-                className="text-blue-400 transition-transform hover:scale-150"
-              >
-                <ThumbsUp size={20} fill="currentColor" />
-              </button>
-              <button
-                onClick={() => spawnEmoji('😂')}
-                className="text-yellow-400 transition-transform hover:scale-150"
-              >
-                <Smile size={20} fill="currentColor" />
-              </button>
-              <button
-                onClick={() => spawnEmoji('🔥')}
-                className="text-orange-400 transition-transform hover:scale-150"
-              >
-                <Flame size={20} fill="currentColor" />
-              </button>
-            </div>
-            <form
-              onSubmit={handleSendMessage}
-              className="flex flex-col gap-2 rounded-[20px] border border-white/10 bg-black/40 p-2"
+            <div
+              className="border-t border-white/5 bg-black/20 p-4"
+              ref={chatContainerRef}
             >
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Nhắn gì đó..."
-                className="w-full bg-transparent px-3 py-1.5 text-sm text-white placeholder-white/20 outline-none"
-              />
-              <div className="relative flex items-center justify-between px-3 pb-1 text-white/40">
-                <div className="flex items-center gap-4">
-                  {/* Emoji Button */}
-                  <div className="relative">
+              <div className="mb-3 flex justify-center gap-5">
+                <button
+                  onClick={() => spawnEmoji('❤️')}
+                  className="text-red-400 transition-transform hover:scale-150"
+                >
+                  <Heart size={20} fill="currentColor" />
+                </button>
+                <button
+                  onClick={() => spawnEmoji('👍')}
+                  className="text-blue-400 transition-transform hover:scale-150"
+                >
+                  <ThumbsUp size={20} fill="currentColor" />
+                </button>
+                <button
+                  onClick={() => spawnEmoji('😂')}
+                  className="text-yellow-400 transition-transform hover:scale-150"
+                >
+                  <Smile size={20} fill="currentColor" />
+                </button>
+                <button
+                  onClick={() => spawnEmoji('🔥')}
+                  className="text-orange-400 transition-transform hover:scale-150"
+                >
+                  <Flame size={20} fill="currentColor" />
+                </button>
+              </div>
+              <form
+                onSubmit={handleSendMessage}
+                className="flex flex-col gap-2 rounded-[20px] border border-white/10 bg-black/40 p-2"
+              >
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Nhắn gì đó..."
+                  className="w-full bg-transparent px-3 py-1.5 text-sm text-white placeholder-white/20 outline-none"
+                />
+                <div className="flex items-center justify-between px-3 pb-1 text-white/40">
+                  <div className="flex items-center gap-4">
                     <Smile
                       size={18}
-                      className={`cursor-pointer transition-colors hover:text-white ${isEmojiPickerOpen ? 'text-[#C800DF]' : ''}`}
+                      className="cursor-pointer hover:text-white"
                       onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
                     />
-                    <AnimatePresence>
-                      {isEmojiPickerOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10, scale: 0.9 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                          className="absolute bottom-10 left-0 z-50 shadow-2xl"
-                        >
-                          <EmojiPicker
-                            onEmojiClick={onEmojiClick}
-                            theme={Theme.DARK}
-                            lazyLoadEmojis={true}
-                          />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  {/* GIF Button */}
-                  <div className="relative">
                     <span
                       onClick={() => setIsGifPickerOpen(!isGifPickerOpen)}
-                      className={`cursor-pointer text-[10px] font-black uppercase transition-colors hover:text-white ${isGifPickerOpen ? 'text-[#C800DF]' : ''}`}
+                      className="cursor-pointer text-[10px] font-black uppercase hover:text-white"
                     >
                       GIF
                     </span>
-                    <AnimatePresence>
-                      {isGifPickerOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 10 }}
-                          className="absolute bottom-10 left-0 z-50 flex h-80 w-72 flex-col rounded-2xl border border-white/10 bg-[#121214] p-3 shadow-2xl"
-                        >
-                          <input
-                            type="text"
-                            placeholder="Tìm GIF..."
-                            value={gifSearch}
-                            onChange={(e) => setGifSearch(e.target.value)}
-                            className="mb-3 w-full rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-xs outline-none focus:border-[#C800DF]"
-                            autoFocus
-                          />
-                          <div className="scrollbar-hide grid flex-1 grid-cols-2 gap-2 overflow-y-auto">
-                            {gifs.map((gif: any) => (
-                              <img
-                                key={gif.id}
-                                src={gif.images.fixed_height_small.url}
-                                alt="gif"
-                                className="h-24 w-full cursor-pointer rounded-lg object-cover transition-transform hover:scale-105"
-                                onClick={() => {
-                                  sendMessage(gif.images.original.url);
-                                  setIsGifPickerOpen(false);
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Image Button */}
-                  <div className="relative">
+                    <ImageIcon
+                      size={18}
+                      className="cursor-pointer hover:text-white"
+                      onClick={() => fileInputRef.current?.click()}
+                    />
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -1199,38 +1556,86 @@ export default function CommunityRoomPage({
                       accept="image/*"
                       onChange={handleImageUpload}
                     />
-                    {isUploading ? (
-                      <Loader2
-                        size={18}
-                        className="animate-spin text-[#C800DF]"
-                      />
-                    ) : (
-                      <ImageIcon
-                        size={18}
-                        className="cursor-pointer transition-colors hover:text-white"
-                        onClick={() => fileInputRef.current?.click()}
-                      />
-                    )}
                   </div>
-
-                  <Mic
-                    size={18}
-                    className="cursor-pointer transition-colors hover:text-white"
-                  />
+                  <button
+                    type="submit"
+                    disabled={!chatInput.trim()}
+                    className="text-[#C800DF] hover:scale-110 disabled:opacity-20"
+                  >
+                    <Send size={18} />
+                  </button>
                 </div>
-                <button
-                  type="submit"
-                  disabled={!chatInput.trim()}
-                  className="text-[#C800DF] transition-all hover:scale-110 disabled:opacity-20"
-                >
-                  <Send size={18} />
-                </button>
-              </div>
-            </form>
+              </form>
+
+              {/* Emoji Picker */}
+              <AnimatePresence>
+                {isEmojiPickerOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute right-4 bottom-24 z-50"
+                  >
+                    <EmojiPicker
+                      onEmojiClick={onEmojiClick}
+                      theme={Theme.DARK}
+                      lazyLoadEmojis
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* GIF Picker */}
+              <AnimatePresence>
+                {isGifPickerOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="glass absolute right-4 bottom-24 z-50 flex h-96 w-72 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black shadow-2xl"
+                  >
+                    <div className="border-b border-white/5 p-3">
+                      <div className="relative">
+                        <Search
+                          size={14}
+                          className="absolute top-1/2 left-3 -translate-y-1/2 text-white/20"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Tìm GIF..."
+                          value={gifSearch}
+                          onChange={(e) => setGifSearch(e.target.value)}
+                          className="w-full rounded-lg bg-white/5 py-1.5 pr-3 pl-9 text-xs text-white outline-none focus:bg-white/10"
+                        />
+                      </div>
+                    </div>
+                    <div className="scrollbar-hide grid grid-cols-2 gap-1 overflow-y-auto p-1">
+                      {gifs.map((gif) => (
+                        <div
+                          key={gif.id}
+                          className="group relative aspect-square cursor-pointer overflow-hidden rounded-lg"
+                          onClick={() => {
+                            sendMessage(gif.images.original.url);
+                            setIsGifPickerOpen(false);
+                          }}
+                        >
+                          <img
+                            src={gif.images.fixed_height_small.url}
+                            alt="gif"
+                            className="h-full w-full object-cover transition-transform group-hover:scale-110"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
-      </div>
-      {/* Leave Confirmation Modal */}
+      </LiveKitProvider>
+
+      {/* MODALS */}
       <AnimatePresence>
         {isLeaveModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -1242,33 +1647,24 @@ export default function CommunityRoomPage({
               className="absolute inset-0 bg-black/80 backdrop-blur-sm"
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="glass relative w-full max-w-sm overflow-hidden rounded-[32px] border border-white/10 bg-[#121214] p-8 shadow-2xl"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass relative w-full max-w-sm rounded-[32px] border border-white/10 bg-[#121214] p-8 shadow-2xl"
             >
-              <div className="mb-6 flex justify-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
-                  <LogOut size={32} />
-                </div>
-              </div>
               <h3 className="mb-2 text-center text-xl font-bold text-white">
                 Rời khỏi phòng?
               </h3>
-              <p className="mb-8 text-center text-sm leading-relaxed text-white/60">
-                Bạn có chắc chắn muốn rời khỏi phòng này? Các thông tin của bạn
-                sẽ được xóa ngay lập tức.
-              </p>
-              <div className="flex flex-col gap-3">
+              <div className="mt-8 flex flex-col gap-3">
                 <button
-                  onClick={() => router.push('/rooms')}
-                  className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
+                  onClick={handleLeaveRoom}
+                  className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white hover:bg-red-600"
                 >
                   Xác nhận rời phòng
                 </button>
                 <button
                   onClick={() => setIsLeaveModalOpen(false)}
-                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
+                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white hover:bg-white/10"
                 >
                   Ở lại
                 </button>
@@ -1371,36 +1767,56 @@ export default function CommunityRoomPage({
       {/* Image Viewer Modal */}
       <AnimatePresence>
         {selectedImage && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-10">
+          <div
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+            onClick={() => setSelectedImage(null)}
+          >
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setSelectedImage(null)}
               className="absolute inset-0 bg-black/90 backdrop-blur-md"
             />
-            <motion.div
+            <motion.img
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="relative z-[210] max-h-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 shadow-2xl"
-            >
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white transition-colors hover:bg-black/80"
-              >
-                <X size={20} />
-              </button>
-              <img
-                src={selectedImage}
-                alt="Enlarged view"
-                className="max-h-[85vh] w-full object-contain"
-              />
-            </motion.div>
+              src={selectedImage}
+              className="relative z-[210] max-h-[85vh] rounded-2xl object-contain shadow-2xl"
+            />
           </div>
         )}
       </AnimatePresence>
 
+      <ConfirmationModal
+        isOpen={!!kickTarget}
+        onClose={() => setKickTarget(null)}
+        onConfirm={() => kickTarget && kickMember(kickTarget)}
+        title="Mời ra khỏi phòng"
+        message={`Bạn có chắc chắn muốn mời ${kickTarget} ra khỏi phòng không?`}
+        confirmText="Mời ra"
+        type="danger"
+      />
+
+      <ConfirmationModal
+        isOpen={isSubGroupLeaveModalOpen}
+        onClose={() => setIsSubGroupLeaveModalOpen(false)}
+        onConfirm={handleLeaveSubGroup}
+        title="Rời Sub-group"
+        message="Bạn có chắc chắn muốn rời khỏi sub-group hiện tại? Bạn vẫn sẽ ở lại trong phòng cộng đồng."
+        confirmText="Rời nhóm"
+        type="warning"
+      />
+
+      <ConfirmationModal
+        isOpen={isEndRoomModalOpen}
+        onClose={() => setIsEndRoomModalOpen(false)}
+        onConfirm={handleEndRoom}
+        title="Kết thúc phòng"
+        message="Bạn có chắc chắn muốn kết thúc phòng? Tất cả người xem sẽ bị đưa ra ngoài và phòng sẽ không còn hoạt động."
+        confirmText="Kết thúc"
+        type="danger"
+      />
       {/* ── Admin Context Menu ────────────────────────────────────────────── */}
       <AnimatePresence>
         {contextMenu && (

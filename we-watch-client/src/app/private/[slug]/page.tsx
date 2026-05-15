@@ -46,6 +46,7 @@ import { toast } from 'sonner';
 import { useSocket } from '@/src/hooks/useSocket';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import LiveKitRoom from '@/src/components/rooms/LiveKitRoom';
+import { ConfirmationModal } from '@/src/components/rooms/ConfirmationModal';
 import api from '@/src/lib/axios';
 import VideoPlayer from '@/src/components/videos/VideoPlayer';
 
@@ -102,6 +103,8 @@ export default function WeWatchRoomPage({
     videoChangeTrigger,
     videoState,
     requestVideoSync,
+    kickMember,
+  } = useSocket(room?.id, user, password, () => router.push('/rooms'));
     serverTimeOffset,
     deleteMessage,
     muteChatUser,
@@ -162,7 +165,10 @@ export default function WeWatchRoomPage({
   // Click outside to close pickers
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (chatContainerRef.current && !chatContainerRef.current.contains(event.target as Node)) {
+      if (
+        chatContainerRef.current &&
+        !chatContainerRef.current.contains(event.target as Node)
+      ) {
         setIsEmojiPickerOpen(false);
         setIsGifPickerOpen(false);
       }
@@ -244,6 +250,11 @@ export default function WeWatchRoomPage({
       try {
         setLoading(true);
         let data;
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            params.slug
+          );
+
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.slug);
       
         if (isUuid) {
@@ -402,6 +413,42 @@ export default function WeWatchRoomPage({
       });
     };
 
+  const fetchGifs = async (query = '') => {
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GIF_API_KEY || 'LIVDSRZULELA';
+      const provider = process.env.NEXT_PUBLIC_GIF_PROVIDER || 'tenor';
+
+      let endpoint = '';
+      if (provider === 'tenor') {
+        endpoint = query
+          ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${apiKey}&limit=20`
+          : `https://tenor.googleapis.com/v2/featured?key=${apiKey}&limit=20`;
+      } else {
+        endpoint = query
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(query)}&limit=20&rating=g`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=20&rating=g`;
+      }
+
+      const res = await fetch(endpoint);
+      const data = await res.json();
+
+      let formattedGifs = [];
+      if (provider === 'tenor') {
+        formattedGifs = (data.results || []).map((g: any) => ({
+          id: g.id,
+          images: {
+            fixed_height_small: { url: g.media_formats.tinygif.url },
+            original: { url: g.media_formats.gif.url },
+          },
+        }));
+      } else {
+        formattedGifs = (data.data || []).map((g: any) => ({
+          id: g.id,
+          images: {
+            fixed_height_small: { url: g.images.fixed_height_small.url },
+            original: { url: g.images.original.url },
+          },
+        }));
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
@@ -480,9 +527,11 @@ export default function WeWatchRoomPage({
       setIsEmojiPickerOpen(false);
     };
 
-    const handleKick = (name: string) => {
-      alert(`Đã kick ${name} khỏi phòng!`);
-    };
+  const [kickTarget, setKickTarget] = useState<string | null>(null);
+
+  const handleKick = (name: string) => {
+    setKickTarget(name);
+  };
 
   return (
       <main className="scrollbar-hide flex h-screen w-screen flex-col overflow-auto bg-[#0A0A0B] font-sans text-slate-100">
@@ -504,6 +553,29 @@ export default function WeWatchRoomPage({
               <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
                 {room.type}
               </span>
+            </div>
+          )}
+
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
+          >
+            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+            <div className="flex flex-col items-start leading-tight">
+              <span>
+                {isSyncing
+                  ? 'Đang đồng bộ...'
+                  : syncDone
+                    ? 'Đã đồng bộ!'
+                    : 'Đồng bộ với Host'}
+              </span>
+              {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
+                <span
+                  className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
+                >
+                  Lệch: {timeOffset > 0 ? '+' : ''}
+                  {timeOffset.toFixed(1)}s
             )}
           </Link>
           <div className="flex items-center gap-3">
@@ -937,6 +1009,20 @@ export default function WeWatchRoomPage({
                             key={m.username || idx}
                             className="group flex items-center justify-between"
                           >
+                            {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
+                            msg.message.includes('cloudinary.com') ||
+                            msg.message.includes('giphy.com') ||
+                            msg.message.includes('tenor.com') ? (
+                              <div
+                                className="relative mt-1 cursor-zoom-in overflow-hidden rounded-lg transition-opacity hover:opacity-90"
+                                onClick={() => setSelectedImage(msg.message)}
+                              >
+                                <img
+                                  src={msg.message}
+                                  alt="Chat media"
+                                  className="max-h-60 w-full object-contain"
+                                  loading="lazy"
+                                />
                             <div className="flex items-center gap-3">
                               <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full border border-white/10">
                                 {m.avatarUrl ? (
@@ -1004,6 +1090,79 @@ export default function WeWatchRoomPage({
                 <Maximize size={16} className="cursor-pointer hover:text-white" />
               </div>
             </div>
+            <form
+              onSubmit={handleSendMessage}
+              className="flex flex-col gap-2 rounded-[20px] border border-white/10 bg-black/60 p-2 shadow-inner"
+            >
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Nhắn gì đó..."
+                className="w-full bg-transparent px-3 py-2 text-sm text-white placeholder-white/20 outline-none"
+              />
+              <div className="relative flex items-center justify-between px-3 pb-2 text-white/40">
+                <div className="flex items-center gap-4">
+                  {/* Emoji Button */}
+                  <div className="relative">
+                    <Smile
+                      size={18}
+                      className={`cursor-pointer transition-colors hover:text-white ${isEmojiPickerOpen ? 'text-[#C800DF]' : ''}`}
+                      onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
+                    />
+                    <AnimatePresence>
+                      {isEmojiPickerOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                          className="absolute bottom-10 left-0 z-50 shadow-2xl"
+                        >
+                          <EmojiPicker
+                            onEmojiClick={onEmojiClick}
+                            theme={Theme.DARK}
+                            lazyLoadEmojis={true}
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* GIF Button */}
+                  <div className="relative">
+                    <span
+                      onClick={() => setIsGifPickerOpen(!isGifPickerOpen)}
+                      className={`cursor-pointer text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white ${isGifPickerOpen ? 'text-[#C800DF]' : ''}`}
+                    >
+                      GIF
+                    </span>
+                    <AnimatePresence>
+                      {isGifPickerOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 10 }}
+                          className="absolute bottom-10 left-0 z-50 flex h-80 w-72 flex-col rounded-2xl border border-white/10 bg-[#121214] p-3 shadow-2xl"
+                        >
+                          <input
+                            type="text"
+                            placeholder="Tìm GIF..."
+                            value={gifSearch}
+                            onChange={(e) => setGifSearch(e.target.value)}
+                            className="mb-3 w-full rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-xs outline-none focus:border-[#C800DF]"
+                            autoFocus
+                          />
+                          <div className="scrollbar-hide grid flex-1 grid-cols-2 gap-2 overflow-y-auto">
+                            {gifs.map((gif: any) => (
+                              <img
+                                key={gif.id}
+                                src={gif.images.fixed_height_small.url}
+                                alt="gif"
+                                className="h-24 w-full cursor-pointer rounded-lg object-cover transition-transform hover:scale-105"
+                                onClick={() => {
+                                  sendMessage(gif.images.original.url);
+                                  setIsGifPickerOpen(false);
+                                }}
 
             {/* Floating Emojis Layer */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -1112,6 +1271,22 @@ export default function WeWatchRoomPage({
               </div>
             )}
 
+                  {/* Image Button */}
+                  <div className="relative">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                    />
+                    {isUploading ? (
+                      <Loader2
+                        size={18}
+                        className="animate-spin text-[#C800DF]"
+                      />
+                    ) : (
+                      <ImageIcon
             {/* Chat Input */}
             <div className="border-t border-white/5 p-4" ref={chatContainerRef}>
               {/* Emoji Reactions */}
@@ -1535,6 +1710,16 @@ export default function WeWatchRoomPage({
           </div>
         )}
       </AnimatePresence>
+
+      <ConfirmationModal
+        isOpen={!!kickTarget}
+        onClose={() => setKickTarget(null)}
+        onConfirm={() => kickTarget && kickMember(kickTarget)}
+        title="Mời ra khỏi phòng"
+        message={`Bạn có chắc chắn muốn mời ${kickTarget} ra khỏi phòng không?`}
+        confirmText="Mời ra"
+        type="danger"
+      />
     </main>
   );
 }
