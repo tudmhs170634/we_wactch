@@ -83,6 +83,8 @@ export const useSocket = (
   const [videoState, setVideoState] = useState<VideoState | null>(null);
   const [lastVideoAction, setLastVideoAction] = useState<VideoActionEvent | null>(null);
   const [videoChangeTrigger, setVideoChangeTrigger] = useState(0);
+  const [serverTimeOffset, setServerTimeOffset] = useState(0);
+  const timeSyncSamples = useRef<number[]>([]);
 
   useEffect(() => {
     if (!roomId || !user) return;
@@ -105,6 +107,26 @@ export const useSocket = (
         role: user.role,
         password: password,
       });
+
+      // ── NTP-lite Clock Sync: 3 rounds of ping-pong ──
+      timeSyncSamples.current = [];
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          socket.emit('timeSyncRequest', { clientSendTime: Date.now() });
+        }, i * 200);
+      }
+    });
+
+    socket.on('timeSyncResponse', (data: { clientSendTime: number; serverTime: number }) => {
+      const now = Date.now();
+      const rtt = now - data.clientSendTime;
+      const offset = data.serverTime - (data.clientSendTime + rtt / 2);
+      timeSyncSamples.current.push(offset);
+
+      if (timeSyncSamples.current.length >= 3) {
+        const avg = timeSyncSamples.current.reduce((a, b) => a + b, 0) / timeSyncSamples.current.length;
+        setServerTimeOffset(Math.round(avg));
+      }
     });
 
     socket.on('error', (err: string) => {
@@ -263,10 +285,10 @@ export const useSocket = (
         roomId,
         action,
         currentTime,
-        sentAt: Date.now(),
+        sentAt: Date.now() + serverTimeOffset, // NTP-corrected timestamp
       });
     },
-    [roomId],
+    [roomId, serverTimeOffset],
   );
 
   const playVideoFromWishlist = useCallback(
@@ -299,5 +321,6 @@ export const useSocket = (
     videoChangeTrigger,
     currentHostId,
     setCurrentHostId,
+    serverTimeOffset,
   };
 };

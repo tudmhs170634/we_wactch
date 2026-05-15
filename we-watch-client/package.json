@@ -19,6 +19,7 @@
     "axios": "^1.15.1",
     "emoji-picker-react": "^4.19.1",
     "framer-motion": "^12.38.0",
+    "hls.js": "^1.6.16",
     "js-cookie": "^3.0.5",
     "livekit-client": "^2.18.3",
     "lucide-react": "^1.8.0",

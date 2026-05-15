@@ -546,6 +546,19 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         }
     }
 
+    // ─── NTP-lite Clock Synchronization ──────────────────────────────────────
+
+    @SubscribeMessage('timeSyncRequest')
+    handleTimeSync(
+        @ConnectedSocket() client: Socket,
+        @MessageBody() data: { clientSendTime: number },
+    ) {
+        client.emit('timeSyncResponse', {
+            clientSendTime: data.clientSendTime,
+            serverTime: Date.now(),
+        });
+    }
+
     // ─── Video Wishlist ─────────────────────────────────────────────────────
 
     @SubscribeMessage('addVideoToWishlist')

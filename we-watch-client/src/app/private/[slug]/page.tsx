@@ -99,6 +99,7 @@ export default function WeWatchRoomPage({
     videoChangeTrigger,
     videoState,
     requestVideoSync,
+    serverTimeOffset,
   } = useSocket(room?.id, user, password);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -774,6 +775,7 @@ export default function WeWatchRoomPage({
                 lastAction={lastVideoAction}
                 initialState={videoState}
                 onOffsetChange={setTimeOffset}
+                serverTimeOffset={serverTimeOffset}
               />
             ) : room?.video ? (
               <div className="flex h-full w-full animate-pulse items-center justify-center bg-white/5">
