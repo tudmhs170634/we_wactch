@@ -8,6 +8,7 @@ import { RedisModule } from './redis/redis.module';
 import { UserModule } from './user/user.module';
 import { RoomModule } from './room/room.module';
 import { LiveKitModule } from './livekit/livekit.module';
+import { ReportModule } from './report/report.module';
 
 @Module({
   imports: [
@@ -18,8 +19,9 @@ import { LiveKitModule } from './livekit/livekit.module';
     UserModule,
     RoomModule,
     LiveKitModule,
+    ReportModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

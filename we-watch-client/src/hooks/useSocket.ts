@@ -58,7 +58,7 @@ export const useSocket = (
   roomId?: string,
   user?: any,
   password?: string,
-  onRoomEnded?: () => void
+  onRoomEnded?: (reason?: string, stoppedBy?: string, stoppedByRole?: string) => void
 ) => {
   const socketRef = useRef<Socket | null>(null);
   const joinAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -84,6 +84,11 @@ export const useSocket = (
   const [videoState, setVideoState] = useState<VideoState | null>(null);
   const [lastVideoAction, setLastVideoAction] = useState<VideoActionEvent | null>(null);
   const [videoChangeTrigger, setVideoChangeTrigger] = useState(0);
+  // username -> mutedUntil (timestamp ms)
+  const [mutedUsers, setMutedUsers] = useState<Record<string, number>>({});
+  const [chatMuteInfo, setChatMuteInfo] = useState<{ mutedUntil: number; mutedBy: string; remainingMinutes: number } | null>(null);
+  const [serverTimeOffset, setServerTimeOffset] = useState(0);
+  const timeSyncSamples = useRef<number[]>([]);
   const [hostMediaState, setHostMediaState] = useState<{ mic: boolean; cam: boolean }>({ mic: true, cam: true });
 
   useEffect(() => {
@@ -107,6 +112,25 @@ export const useSocket = (
         role: user.role,
         password: password,
       });
+     // ── NTP-lite Clock Sync: 3 rounds of ping-pong ──
+      timeSyncSamples.current = [];
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          socket.emit('timeSyncRequest', { clientSendTime: Date.now() });
+        }, i * 200);
+      }
+    });
+
+    socket.on('timeSyncResponse', (data: { clientSendTime: number; serverTime: number }) => {
+      const now = Date.now();
+      const rtt = now - data.clientSendTime;
+      const offset = data.serverTime - (data.clientSendTime + rtt / 2);
+      timeSyncSamples.current.push(offset);
+
+      if (timeSyncSamples.current.length >= 3) {
+        const avg = timeSyncSamples.current.reduce((a, b) => a + b, 0) / timeSyncSamples.current.length;
+        setServerTimeOffset(Math.round(avg));
+      }
     });
 
     socket.on('error', (err: string) => {
@@ -139,9 +163,9 @@ export const useSocket = (
       setMembers((prev) => prev.filter((m) => m.username !== username));
     });
 
-    // Lắng nghe khi host kết thúc phòng
-    socket.on('roomEnded', () => {
-      onRoomEnded?.();
+    // Lắng nghe khi host/admin kết thúc phòng
+    socket.on('roomEnded', (data?: { reason?: string; stoppedBy?: string; stoppedByRole?: string }) => {
+      onRoomEnded?.(data?.reason, data?.stoppedBy, data?.stoppedByRole);
     });
 
     // ── Chat ─────────────────────────────────────────────────────────────────
@@ -190,10 +214,37 @@ export const useSocket = (
       setLastVideoAction(event);
     });
 
-    socket.on('videoChanged', (data: any) => {
+    socket.on('videoChanged', (_data: any) => {
       setVideoState(null); // Reset state cũ
       setVideoChangeTrigger(prev => prev + 1);
     });
+
+    // ── Chat Moderation ─────────────────────────────────────────────────────
+    // Xóa tin nhắn khỏi UI khi admin/host xóa
+    socket.on('messageDeleted', ({ messageId }: { messageId: string }) => {
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    });
+
+    // Khi admin mute một user
+    socket.on('userMuted', ({ username, mutedUntil }: { username: string; mutedUntil: number; mutedBy: string; durationMinutes: number }) => {
+      setMutedUsers((prev) => ({ ...prev, [username]: mutedUntil }));
+    });
+
+    // Khi admin bỏ mute
+    socket.on('userUnmuted', ({ username }: { username: string }) => {
+      setMutedUsers((prev) => {
+        const next = { ...prev };
+        delete next[username];
+        return next;
+      });
+    });
+
+    // Khi chính user bị cấm cố gửi tin nhắn -> server trả về thông tin mute
+    socket.on('chatMuted', (info: { mutedUntil: number; mutedBy: string; remainingMinutes: number }) => {
+      setChatMuteInfo(info);
+      setTimeout(() => setChatMuteInfo(null), 4000);
+    });
+
     
     socket.on('hostMediaStateUpdate', (state: { mic: boolean; cam: boolean }) => {
       setHostMediaState(state);
@@ -276,10 +327,10 @@ export const useSocket = (
         roomId,
         action,
         currentTime,
-        sentAt: Date.now(),
+        sentAt: Date.now() + serverTimeOffset, // NTP-corrected timestamp
       });
     },
-    [roomId],
+    [roomId, serverTimeOffset],
   );
 
   const updateHostMediaState = useCallback(
@@ -290,10 +341,42 @@ export const useSocket = (
     [roomId],
   );
 
+   const playVideoFromWishlist = useCallback(
+    (videoId: string) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('playVideoFromWishlist', { roomId, videoId });
+    },
+    [roomId],
+  );
+
   const kickMember = useCallback(
     (targetUsername: string) => {
       if (!socketRef.current || !roomId) return;
       socketRef.current.emit('kickMember', { roomId, targetUsername });
+    },
+    [roomId],
+  );
+
+  const deleteMessage = useCallback(
+    (messageId: string) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('deleteMessage', { roomId, messageId });
+    },
+    [roomId],
+  );
+
+  const muteChatUser = useCallback(
+    (targetUsername: string, durationMinutes: number) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('muteChatUser', { roomId, targetUsername, durationMinutes });
+    },
+    [roomId],
+  );
+
+  const unmuteChatUser = useCallback(
+    (targetUsername: string) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('unmuteChatUser', { roomId, targetUsername });
     },
     [roomId],
   );
@@ -312,6 +395,7 @@ export const useSocket = (
     sendEmoji,
     addVideoToWishlist,
     removeVideoFromWishlist,
+    playVideoFromWishlist,
     sendVideoAction,
     requestVideoSync,
     videoState,
@@ -319,6 +403,12 @@ export const useSocket = (
     videoChangeTrigger,
     currentHostId,
     setCurrentHostId,
+    mutedUsers,
+    chatMuteInfo,
+    deleteMessage,
+    muteChatUser,
+    unmuteChatUser,
+    serverTimeOffset,
     hostMediaState,
     updateHostMediaState,
     kickMember,

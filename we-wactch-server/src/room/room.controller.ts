@@ -83,4 +83,14 @@ export class RoomController {
   remove(@Param('id') id: string, @GetUser() user: any) {
     return this.roomService.remove(id, user.userId, user.role);
   }
+
+  @Post(':id/terminate')
+  @UseGuards(JwtAuthGuard)
+  terminate(
+    @Param('id') id: string,
+    @GetUser() user: any,
+    @Body('reason') reason: string,
+  ) {
+    return this.roomService.remove(id, user.userId, user.role, reason);
+  }
 }

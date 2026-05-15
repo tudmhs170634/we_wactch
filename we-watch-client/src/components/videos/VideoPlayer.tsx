@@ -1,39 +1,171 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, Loader2 } from 'lucide-react';
+import {
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize,
+  Loader2,
+  Settings,
+} from 'lucide-react';
+import Hls from 'hls.js';
+
+interface QualityLevel {
+  index: number;
+  height: number;
+  bitrate: number;
+  label: string;
+}
 
 interface VideoPlayerProps {
   src: string;
   poster?: string | null;
   onAction?: (action: 'play' | 'pause' | 'seek', currentTime: number) => void;
-  lastAction?: { action: 'play' | 'pause' | 'seek'; currentTime: number; sentAt: number; username: string } | null;
-  initialState?: { isPlaying: boolean; currentTime: number; lastUpdated: number } | null;
+  lastAction?: {
+    action: 'play' | 'pause' | 'seek';
+    currentTime: number;
+    sentAt: number;
+    username: string;
+  } | null;
+  initialState?: {
+    isPlaying: boolean;
+    currentTime: number;
+    lastUpdated: number;
+  } | null;
   onOffsetChange?: (offset: number) => void;
+  serverTimeOffset?: number;
 }
 
-export default function VideoPlayer({ src, poster, onAction, lastAction, initialState, onOffsetChange }: VideoPlayerProps) {
+export default function VideoPlayer({
+  src,
+  poster,
+  onAction,
+  lastAction,
+  initialState,
+  onOffsetChange,
+  serverTimeOffset = 0,
+}: VideoPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
+  const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
+  const [currentQuality, setCurrentQuality] = useState(-1); // -1 = Auto
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [currentAutoLabel, setCurrentAutoLabel] = useState(''); // Label hiển thị khi Auto
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
+
   // Flag để tránh vòng lặp: khi nhận lệnh từ socket thì không emit ngược lại
   const ignoreNextEvent = useRef(false);
+  // Flag để theo dõi playback rate adjustment
+  const rateAdjustTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── HLS.js Setup ──
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || !src) return;
+
+    // Cleanup previous HLS instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    const isHLS = src.endsWith('.m3u8') || src.includes('.m3u8?');
+
+    if (isHLS && Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 90,
+      });
+      hlsRef.current = hls;
+      hls.loadSource(src);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
+        setLoading(false);
+        // Thu thập các mức chất lượng
+        const levels: QualityLevel[] = data.levels.map(
+          (level: any, idx: number) => ({
+            index: idx,
+            height: level.height,
+            bitrate: level.bitrate,
+            label: `${level.height}p`,
+          })
+        );
+        // Sắp xếp từ cao → thấp
+        levels.sort((a, b) => b.height - a.height);
+        setQualityLevels(levels);
+        setCurrentQuality(-1); // Auto mặc định
+      });
+
+      // Theo dõi level hiện tại khi Auto
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
+        const level = hls.levels[data.level];
+        if (level) {
+          setCurrentAutoLabel(`${level.height}p`);
+        }
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
+              break;
+            default:
+              hls.destroy();
+              break;
+          }
+        }
+      });
+    } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS support
+      video.src = src;
+      setQualityLevels([]);
+    } else {
+      // Regular MP4 — không có quality levels
+      video.src = src;
+      setQualityLevels([]);
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      setQualityLevels([]);
+    };
+  }, [src]);
+
+  // ── Chuyển đổi chất lượng ──
+  const switchQuality = (levelIndex: number) => {
+    if (!hlsRef.current) return;
+    hlsRef.current.currentLevel = levelIndex; // -1 = auto
+    setCurrentQuality(levelIndex);
+    setShowQualityMenu(false);
+  };
 
   // ── Xử lý trạng thái ban đầu khi mới join ──
   useEffect(() => {
     if (!initialState || !ref.current) return;
     const v = ref.current;
-    
+
     // Tính toán giây hiện tại dựa trên thời điểm cập nhật cuối
     const elapsed = (Date.now() - initialState.lastUpdated) / 1000;
-    const targetTime = initialState.currentTime + (initialState.isPlaying ? elapsed : 0);
-    
+    const targetTime =
+      initialState.currentTime + (initialState.isPlaying ? elapsed : 0);
+
     ignoreNextEvent.current = true;
     v.currentTime = targetTime;
     if (initialState.isPlaying) {
@@ -45,45 +177,75 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
     }
   }, [initialState]);
 
-  // ── Xử lý lệnh từ Socket ──
+  // ── Xử lý lệnh từ Socket (với Playback Rate Adjustment) ──
   useEffect(() => {
     if (!lastAction || !ref.current) return;
     const v = ref.current;
 
-    // Tính toán bù trừ độ trễ
-    const delay = (Date.now() - lastAction.sentAt) / 1000;
-    const targetTime = lastAction.currentTime + (lastAction.action === 'play' ? delay : 0);
+    // Tính toán bù trừ độ trễ (sử dụng NTP-corrected sentAt)
+    const now = Date.now() + serverTimeOffset;
+    const delay = (now - lastAction.sentAt) / 1000;
+    const targetTime =
+      lastAction.currentTime + (lastAction.action === 'play' ? delay : 0);
 
-    ignoreNextEvent.current = true; // Đánh dấu là thay đổi từ hệ thống
+    ignoreNextEvent.current = true;
 
     switch (lastAction.action) {
-      case 'play':
-        v.currentTime = targetTime;
-        v.play().catch(() => {});
+      case 'play': {
+        const diff = targetTime - v.currentTime;
+
+        if (Math.abs(diff) < 0.5) {
+          // Lệch nhỏ → chỉ play, không seek
+          v.play().catch(() => {});
+        } else if (Math.abs(diff) < 2) {
+          // Lệch vừa → chỉnh playback rate để đuổi kịp
+          v.play().catch(() => {});
+          const rate = diff > 0 ? 1.05 : 0.95;
+          v.playbackRate = rate;
+
+          // Khôi phục tốc độ bình thường sau khi đuổi kịp
+          if (rateAdjustTimer.current) clearTimeout(rateAdjustTimer.current);
+          rateAdjustTimer.current = setTimeout(
+            () => {
+              if (ref.current) ref.current.playbackRate = 1.0;
+            },
+            (Math.abs(diff) * 1000) / 0.05
+          );
+        } else {
+          // Lệch lớn → seek trực tiếp
+          v.currentTime = targetTime;
+          v.play().catch(() => {});
+        }
         setPlaying(true);
         break;
+      }
       case 'pause':
         v.currentTime = lastAction.currentTime;
         v.pause();
+        v.playbackRate = 1.0; // Reset rate khi pause
+        if (rateAdjustTimer.current) clearTimeout(rateAdjustTimer.current);
         setPlaying(false);
         break;
       case 'seek':
         v.currentTime = lastAction.currentTime;
+        v.playbackRate = 1.0;
+        if (rateAdjustTimer.current) clearTimeout(rateAdjustTimer.current);
         if (!v.paused) v.play().catch(() => {});
         break;
     }
-  }, [lastAction]);
+  }, [lastAction, serverTimeOffset]);
 
   // ── Tính toán độ lệch với Host ──
   useEffect(() => {
     const timer = setInterval(() => {
       if (!ref.current || !initialState) return;
       const v = ref.current;
-      
+
       // Tính thời gian Host đáng lẽ đang ở đó
       const elapsed = (Date.now() - initialState.lastUpdated) / 1000;
-      const hostTime = initialState.currentTime + (initialState.isPlaying ? elapsed : 0);
-      
+      const hostTime =
+        initialState.currentTime + (initialState.isPlaying ? elapsed : 0);
+
       const diff = v.currentTime - hostTime;
       onOffsetChange?.(diff);
     }, 1000);
@@ -94,11 +256,12 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
   const togglePlay = () => {
     const v = ref.current;
     if (!v) return;
-    
+
     const newPlaying = !playing;
-    if (newPlaying) v.play(); else v.pause();
+    if (newPlaying) v.play();
+    else v.pause();
     setPlaying(newPlaying);
-    
+
     // Chỉ gửi event nếu là user bấm
     if (!ignoreNextEvent.current) {
       onAction?.(newPlaying ? 'play' : 'pause', v.currentTime);
@@ -118,7 +281,7 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
     const newTime = pct * v.duration;
-    
+
     v.currentTime = newTime;
     onAction?.('seek', newTime);
   };
@@ -128,7 +291,10 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
   const handleMouseMove = () => {
     setShowControls(true);
     if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => playing && setShowControls(false), 3000);
+    hideTimer.current = setTimeout(
+      () => playing && setShowControls(false),
+      3000
+    );
   };
 
   const fmt = (s: number) => {
@@ -143,6 +309,7 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
   useEffect(() => {
     return () => {
       if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (rateAdjustTimer.current) clearTimeout(rateAdjustTimer.current);
     };
   }, []);
 
@@ -193,7 +360,7 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
   const handlePlay = () => {
     setPlaying(true);
     if (!ignoreNextEvent.current) {
-        onAction?.('play', ref.current?.currentTime || 0);
+      onAction?.('play', ref.current?.currentTime || 0);
     }
     ignoreNextEvent.current = false;
   };
@@ -201,7 +368,7 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
   const handlePause = () => {
     setPlaying(false);
     if (!ignoreNextEvent.current) {
-        onAction?.('pause', ref.current?.currentTime || 0);
+      onAction?.('pause', ref.current?.currentTime || 0);
     }
     ignoreNextEvent.current = false;
   };
@@ -215,7 +382,6 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
     >
       <video
         ref={ref}
-        src={src}
         poster={poster ?? undefined}
         className="h-full w-full object-contain"
         onTimeUpdate={() => {
@@ -230,7 +396,7 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
         onPlay={handlePlay}
         onPause={handlePause}
         onClick={togglePlay}
-        preload="metadata"
+        preload="auto"
       />
 
       {/* Loading spinner */}
@@ -257,16 +423,100 @@ export default function VideoPlayer({ src, poster, onAction, lastAction, initial
 
         {/* Buttons */}
         <div className="flex items-center gap-3 px-4 pb-4">
-          <button onClick={togglePlay} className="text-white hover:text-pink-400 transition-colors">
-            {playing ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+          <button
+            onClick={togglePlay}
+            className="text-white transition-colors hover:text-pink-400"
+          >
+            {playing ? (
+              <Pause className="h-6 w-6" />
+            ) : (
+              <Play className="h-6 w-6" />
+            )}
           </button>
-          <button onClick={toggleMute} className="text-white hover:text-pink-400 transition-colors">
-            {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+          <button
+            onClick={toggleMute}
+            className="text-white transition-colors hover:text-pink-400"
+          >
+            {muted ? (
+              <VolumeX className="h-5 w-5" />
+            ) : (
+              <Volume2 className="h-5 w-5" />
+            )}
           </button>
           <span className="flex-1 text-xs font-bold text-white/60">
             {fmt(progress * duration)} / {fmt(duration)}
           </span>
-          <button onClick={fullscreen} className="text-white hover:text-pink-400 transition-colors">
+
+          {/* Quality Selector */}
+          {qualityLevels.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowQualityMenu(!showQualityMenu);
+                }}
+                className="flex items-center gap-1 text-white transition-colors hover:text-pink-400"
+              >
+                <Settings className="h-5 w-5" />
+                <span className="text-[10px] font-bold">
+                  {currentQuality === -1
+                    ? 'Auto'
+                    : qualityLevels.find((q) => q.index === currentQuality)
+                        ?.label}
+                </span>
+              </button>
+
+              {/* Quality Dropdown */}
+              {showQualityMenu && (
+                <div
+                  className="absolute right-0 bottom-8 z-50 min-w-[140px] overflow-hidden rounded-xl border border-white/10 bg-[#1A1A1D]/95 py-1 shadow-2xl backdrop-blur-lg"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="border-b border-white/10 px-3 py-1.5 text-[10px] font-bold tracking-widest text-white/30 uppercase">
+                    Chất lượng
+                  </div>
+                  {/* Auto option */}
+                  <button
+                    onClick={() => switchQuality(-1)}
+                    className={`flex w-full items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-white/10 ${
+                      currentQuality === -1
+                        ? 'font-bold text-pink-400'
+                        : 'text-white/80'
+                    }`}
+                  >
+                    <span>Tự động</span>
+                    {currentQuality === -1 && currentAutoLabel && (
+                      <span className="text-[10px] text-white/40">
+                        {currentAutoLabel}
+                      </span>
+                    )}
+                  </button>
+                  {/* Individual levels */}
+                  {qualityLevels.map((level) => (
+                    <button
+                      key={level.index}
+                      onClick={() => switchQuality(level.index)}
+                      className={`flex w-full items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-white/10 ${
+                        currentQuality === level.index
+                          ? 'font-bold text-pink-400'
+                          : 'text-white/80'
+                      }`}
+                    >
+                      <span>{level.label}</span>
+                      <span className="text-[10px] text-white/30">
+                        {(level.bitrate / 1000000).toFixed(1)}Mbps
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={fullscreen}
+            className="text-white transition-colors hover:text-pink-400"
+          >
             <Maximize className="h-5 w-5" />
           </button>
         </div>
