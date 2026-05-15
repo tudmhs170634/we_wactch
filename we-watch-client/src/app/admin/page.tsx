@@ -26,6 +26,7 @@ import UsersView from './components/UsersView';
 import MoviesView, { AdminMovie } from './components/MoviesView';
 import MovieDetailView from './components/MovieDetailView';
 import RoomsView from './components/RoomsView';
+import ReportsView from './components/ReportsView';
 import ProfileModal from './components/ProfileModal';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAdminStats } from '@/src/services/admin';
@@ -277,6 +278,9 @@ const AdminDashboard = () => {
                       filterType={roomFilter}
                       onFilterChange={setRoomFilter}
                     />
+                  )}
+                  {activeTab === 'reports' && (
+                    <ReportsView />
                   )}
                 </>
               )}
