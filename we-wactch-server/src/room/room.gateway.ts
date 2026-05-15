@@ -751,7 +751,6 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
 
         // 2. Nếu phòng chưa có video hoặc video hiện tại đã bị xóa/không hợp lệ -> Phát luôn
         if (!currentRoom || !currentRoom.videoId) {
-            this.logger.log(`Room ${roomId} is empty or not found. Auto-playing video ${video.id}`);
             
             // Cập nhật Database
             await this.prisma.room.update({

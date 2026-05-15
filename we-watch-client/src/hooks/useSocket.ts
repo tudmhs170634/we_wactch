@@ -381,6 +381,14 @@ export const useSocket = (
     [roomId],
   );
 
+  const playVideoFromWishlist = useCallback(
+    (videoId: string) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('playVideoFromWishlist', { roomId, videoId });
+    },
+    [roomId],
+  );
+
   return {
     socket: socketRef.current,
     isConnected,

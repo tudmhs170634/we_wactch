@@ -957,6 +957,7 @@ export default function WeWatchRoomPage({
             </AnimatePresence>
           </div>
 
+          {/* Chat Messages / History */}
           {!room ? (
             <div className="flex flex-1 flex-col items-center justify-center opacity-40">
               <Loader2 className="animate-spin text-[#C800DF]" size={24} />
@@ -1232,6 +1233,71 @@ export default function WeWatchRoomPage({
                   className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
                 >
                   Ở lại
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Queue Video Confirmation Popup */}
+      <AnimatePresence>
+        {selectedQueueVideo && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setSelectedQueueVideo(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[#1A1A1D] shadow-2xl"
+            >
+              {/* Thumbnail */}
+              <div className="relative aspect-video w-full overflow-hidden">
+                <Image
+                  src={selectedQueueVideo.thumbnailUrl || MOCK_VIDEOS[0].thumbnailUrl}
+                  alt={selectedQueueVideo.title}
+                  fill
+                  unoptimized
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#1A1A1D] via-transparent to-transparent" />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <h3 className="line-clamp-2 text-sm font-bold text-white">
+                    {selectedQueueVideo.title}
+                  </h3>
+                  <p className="mt-1 text-[11px] text-white/50">
+                    Thêm bởi: {selectedQueueVideo.addedBy}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2 p-4">
+                {isHost ? (
+                  <button
+                    onClick={() => {
+                      playVideoFromWishlist(selectedQueueVideo.id);
+                      setSelectedQueueVideo(null);
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#C800DF] py-3 text-sm font-bold text-white transition-all hover:bg-[#a000b3] active:scale-95"
+                  >
+                    <Play size={16} fill="currentColor" />
+                    Phát ngay
+                  </button>
+                ) : (
+                  <p className="text-center text-xs text-white/40 italic">
+                    Chỉ chủ phòng mới có thể chuyển phim
+                  </p>
+                )}
+                <button
+                  onClick={() => setSelectedQueueVideo(null)}
+                  className="w-full rounded-xl bg-white/5 py-3 text-sm font-bold text-white/60 transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Đóng
                 </button>
               </div>
             </motion.div>
