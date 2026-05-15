@@ -8,6 +8,7 @@ import {
   Clock,
   LogOut,
   TrendingUp,
+  AlertTriangle,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -16,7 +17,8 @@ export type TabType =
   | 'users'
   | 'rooms'
   | 'all_movies'
-  | 'movie_queue';
+  | 'movie_queue'
+  | 'reports';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -32,13 +34,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
 }) => {
   const router = useRouter();
-  
+
   const menuItems = [
     { id: 'dashboard', label: 'Bảng điều khiển', icon: LayoutDashboard },
     { id: 'users', label: 'Người dùng', icon: Users },
     { id: 'rooms', label: 'Phòng xem', icon: PlaySquare },
     { id: 'all_movies', label: 'Video', icon: Film },
     { id: 'movie_queue', label: 'Hàng chờ video', icon: Clock },
+    { id: 'reports', label: 'Báo cáo vi phạm', icon: AlertTriangle },
   ];
 
   return (

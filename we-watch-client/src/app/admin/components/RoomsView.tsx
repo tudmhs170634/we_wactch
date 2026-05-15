@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { PlayCircle, Trash2, MonitorPlay } from 'lucide-react';
+import { PlayCircle, Trash2, MonitorPlay, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getRooms, deleteRoom, Room } from '@/src/services/room';
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { getRooms, deleteRoom, terminateRoom, Room } from '@/src/services/room';
 import { toast } from 'sonner';
 
 interface RoomsViewProps {
@@ -35,6 +39,23 @@ const RoomsView: React.FC<RoomsViewProps> = ({
       queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Xóa phòng thất bại');
+    }
+  };
+
+  const handleTerminateRoom = async (roomId: string) => {
+    const reason = window.prompt(
+      'Lý do dừng phòng này vì vi phạm (ví dụ: Bản quyền)?'
+    );
+    if (!reason) return;
+
+    try {
+      await terminateRoom(roomId, reason);
+      toast.success('Đã dừng phòng vì vi phạm!');
+      queryClient.invalidateQueries({ queryKey: ['admin-rooms'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Không thể dừng phòng');
     }
   };
 
@@ -129,14 +150,15 @@ const RoomsView: React.FC<RoomsViewProps> = ({
 
               <div className="mt-6 flex gap-3">
                 <Link
-                  href={`/${room.type === 'public' ? 'community' : 'private'}/${room.id}`}
-                  className="flex flex-1 items-center justify-center rounded-2xl bg-gray-900 py-3 text-[10px] font-black tracking-widest text-white uppercase transition-colors hover:bg-gray-800"
+                  href={`/${room.type === 'public' ? 'community' : 'private'}/${room.id}?monitor=true`}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-gray-900 py-3 text-[10px] font-black tracking-widest text-white uppercase transition-colors hover:bg-gray-800"
                 >
-                  Giám sát
+                  <MonitorPlay size={13} /> Giám sát
                 </Link>
-                <button 
+                <button
                   onClick={() => handleDeleteRoom(room.id)}
                   className="rounded-2xl bg-red-500/10 px-4 text-red-500 transition-colors hover:bg-red-500 hover:text-white"
+                  title="Xóa phòng"
                 >
                   <Trash2 size={18} />
                 </button>

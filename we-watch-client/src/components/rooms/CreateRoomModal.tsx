@@ -196,7 +196,10 @@ export default function CreateRoomModal({
 
           <div className="flex h-16 w-full items-center border-b border-white/10">
             <button
-              onClick={() => setTab('private')}
+              onClick={() => {
+                setTab('private');
+                setMaxUsers(5);
+              }}
               className={`flex h-full flex-1 items-center justify-center gap-2 font-bold transition-all ${
                 tab === 'private'
                   ? 'text-primary border-b-2 border-[#C800DF] bg-white/5'
@@ -210,6 +213,7 @@ export default function CreateRoomModal({
               onClick={() => {
                 setTab('public');
                 setSelectedVideo(null);
+                setMaxUsers(20);
               }}
               className={`flex h-full flex-1 items-center justify-center gap-2 font-bold transition-all ${
                 tab === 'public'
@@ -509,24 +513,26 @@ export default function CreateRoomModal({
                 </div>
               </div>
 
-              <div className="flex flex-1 flex-col gap-2">
-                <label className="flex items-center justify-between text-sm font-bold text-white/80">
-                  Số người tối đa
-                  <span className="rounded-md bg-white/10 px-2 py-0.5 text-xs text-white">
-                    {maxUsers}
-                  </span>
-                </label>
-                <div className="flex h-[46px] items-center">
-                  <input
-                    type="range"
-                    min={2}
-                    max={tab === 'private' ? 7 : 20}
-                    value={maxUsers}
-                    onChange={(e) => setMaxUsers(Number(e.target.value))}
-                    className="w-full accent-[#C800DF]"
-                  />
+              {tab === 'private' && (
+                <div className="flex flex-1 flex-col gap-2">
+                  <label className="flex items-center justify-between text-sm font-bold text-white/80">
+                    Số người tối đa
+                    <span className="rounded-md bg-white/10 px-2 py-0.5 text-xs text-white">
+                      {maxUsers}
+                    </span>
+                  </label>
+                  <div className="flex h-[46px] items-center">
+                    <input
+                      type="range"
+                      min={2}
+                      max={7}
+                      value={maxUsers}
+                      onChange={(e) => setMaxUsers(Number(e.target.value))}
+                      className="w-full accent-[#C800DF]"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <button
