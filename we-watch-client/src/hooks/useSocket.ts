@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ export const useSocket = (
   const [videoState, setVideoState] = useState<VideoState | null>(null);
   const [lastVideoAction, setLastVideoAction] = useState<VideoActionEvent | null>(null);
   const [videoChangeTrigger, setVideoChangeTrigger] = useState(0);
+  const [hostMediaState, setHostMediaState] = useState<{ mic: boolean; cam: boolean }>({ mic: true, cam: true });
 
   useEffect(() => {
     if (!roomId || !user) return;
@@ -192,6 +194,17 @@ export const useSocket = (
       setVideoState(null); // Reset state cũ
       setVideoChangeTrigger(prev => prev + 1);
     });
+    
+    socket.on('hostMediaStateUpdate', (state: { mic: boolean; cam: boolean }) => {
+      setHostMediaState(state);
+    });
+
+    socket.on('kicked', () => {
+      toast.error('Bạn đã bị chủ phòng mời ra khỏi phòng.');
+      setTimeout(() => {
+        window.location.href = '/rooms';
+      }, 2000);
+    });
 
     return () => {
       // Thông báo server trước khi disconnect
@@ -269,6 +282,22 @@ export const useSocket = (
     [roomId],
   );
 
+  const updateHostMediaState = useCallback(
+    (mic: boolean, cam: boolean) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('updateHostMediaState', { roomId, mic, cam });
+    },
+    [roomId],
+  );
+
+  const kickMember = useCallback(
+    (targetUsername: string) => {
+      if (!socketRef.current || !roomId) return;
+      socketRef.current.emit('kickMember', { roomId, targetUsername });
+    },
+    [roomId],
+  );
+
   return {
     socket: socketRef.current,
     isConnected,
@@ -290,5 +319,8 @@ export const useSocket = (
     videoChangeTrigger,
     currentHostId,
     setCurrentHostId,
+    hostMediaState,
+    updateHostMediaState,
+    kickMember,
   };
 };

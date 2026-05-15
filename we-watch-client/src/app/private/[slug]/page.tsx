@@ -46,6 +46,7 @@ import { toast } from 'sonner';
 import { useSocket } from '@/src/hooks/useSocket';
 import { useAuthStore } from '@/src/store/useAuthStore';
 import LiveKitRoom from '@/src/components/rooms/LiveKitRoom';
+import { ConfirmationModal } from '@/src/components/rooms/ConfirmationModal';
 import api from '@/src/lib/axios';
 import VideoPlayer from '@/src/components/videos/VideoPlayer';
 
@@ -96,7 +97,8 @@ export default function WeWatchRoomPage({
     videoChangeTrigger,
     videoState,
     requestVideoSync,
-  } = useSocket(room?.id, user, password);
+    kickMember,
+  } = useSocket(room?.id, user, password, () => router.push('/rooms'));
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isHost, setIsHost] = useState(false);
@@ -117,7 +119,7 @@ export default function WeWatchRoomPage({
   const [timeOffset, setTimeOffset] = useState(0);
 
   // New Chat Feature States
-   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [gifSearch, setGifSearch] = useState('');
@@ -129,7 +131,10 @@ export default function WeWatchRoomPage({
   // Click outside to close pickers
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (chatContainerRef.current && !chatContainerRef.current.contains(event.target as Node)) {
+      if (
+        chatContainerRef.current &&
+        !chatContainerRef.current.contains(event.target as Node)
+      ) {
         setIsEmojiPickerOpen(false);
         setIsGifPickerOpen(false);
       }
@@ -211,8 +216,11 @@ export default function WeWatchRoomPage({
       try {
         setLoading(true);
         let data;
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.slug);
-        
+        const isUuid =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            params.slug
+          );
+
         if (isUuid) {
           try {
             data = await getRoom(params.slug);
@@ -379,20 +387,20 @@ export default function WeWatchRoomPage({
 
   const fetchGifs = async (query = '') => {
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GIF_API_KEY || 'LIVDSRZULELA'; 
+      const apiKey = process.env.NEXT_PUBLIC_GIF_API_KEY || 'LIVDSRZULELA';
       const provider = process.env.NEXT_PUBLIC_GIF_PROVIDER || 'tenor';
 
       let endpoint = '';
       if (provider === 'tenor') {
-        endpoint = query 
+        endpoint = query
           ? `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${apiKey}&limit=20`
           : `https://tenor.googleapis.com/v2/featured?key=${apiKey}&limit=20`;
       } else {
-        endpoint = query 
+        endpoint = query
           ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(query)}&limit=20&rating=g`
           : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=20&rating=g`;
       }
-      
+
       const res = await fetch(endpoint);
       const data = await res.json();
 
@@ -402,16 +410,16 @@ export default function WeWatchRoomPage({
           id: g.id,
           images: {
             fixed_height_small: { url: g.media_formats.tinygif.url },
-            original: { url: g.media_formats.gif.url }
-          }
+            original: { url: g.media_formats.gif.url },
+          },
         }));
       } else {
         formattedGifs = (data.data || []).map((g: any) => ({
           id: g.id,
           images: {
             fixed_height_small: { url: g.images.fixed_height_small.url },
-            original: { url: g.images.original.url }
-          }
+            original: { url: g.images.original.url },
+          },
         }));
       }
       setGifs(formattedGifs);
@@ -431,8 +439,10 @@ export default function WeWatchRoomPage({
     setIsEmojiPickerOpen(false);
   };
 
+  const [kickTarget, setKickTarget] = useState<string | null>(null);
+
   const handleKick = (name: string) => {
-    alert(`Đã kick ${name} khỏi phòng!`);
+    setKickTarget(name);
   };
 
   return (
@@ -474,11 +484,18 @@ export default function WeWatchRoomPage({
             <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
             <div className="flex flex-col items-start leading-tight">
               <span>
-                {isSyncing ? 'Đang đồng bộ...' : syncDone ? 'Đã đồng bộ!' : 'Đồng bộ với Host'}
+                {isSyncing
+                  ? 'Đang đồng bộ...'
+                  : syncDone
+                    ? 'Đã đồng bộ!'
+                    : 'Đồng bộ với Host'}
               </span>
               {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
-                <span className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}>
-                  Lệch: {timeOffset > 0 ? '+' : ''}{timeOffset.toFixed(1)}s
+                <span
+                  className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
+                >
+                  Lệch: {timeOffset > 0 ? '+' : ''}
+                  {timeOffset.toFixed(1)}s
                 </span>
               )}
             </div>
@@ -1007,14 +1024,17 @@ export default function WeWatchRoomPage({
                                 : 'text-white/90'
                             }`}
                           >
-                            {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) || msg.message.includes('cloudinary.com') || msg.message.includes('giphy.com') || msg.message.includes('tenor.com') ? (
-                              <div 
+                            {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
+                            msg.message.includes('cloudinary.com') ||
+                            msg.message.includes('giphy.com') ||
+                            msg.message.includes('tenor.com') ? (
+                              <div
                                 className="relative mt-1 cursor-zoom-in overflow-hidden rounded-lg transition-opacity hover:opacity-90"
                                 onClick={() => setSelectedImage(msg.message)}
                               >
-                                <img 
-                                  src={msg.message} 
-                                  alt="Chat media" 
+                                <img
+                                  src={msg.message}
+                                  alt="Chat media"
                                   className="max-h-60 w-full object-contain"
                                   loading="lazy"
                                 />
@@ -1072,14 +1092,14 @@ export default function WeWatchRoomPage({
                     />
                     <AnimatePresence>
                       {isEmojiPickerOpen && (
-                        <motion.div 
+                        <motion.div
                           initial={{ opacity: 0, y: 10, scale: 0.9 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 10, scale: 0.9 }}
                           className="absolute bottom-10 left-0 z-50 shadow-2xl"
                         >
-                          <EmojiPicker 
-                            onEmojiClick={onEmojiClick} 
+                          <EmojiPicker
+                            onEmojiClick={onEmojiClick}
                             theme={Theme.DARK}
                             lazyLoadEmojis={true}
                           />
@@ -1090,7 +1110,7 @@ export default function WeWatchRoomPage({
 
                   {/* GIF Button */}
                   <div className="relative">
-                    <span 
+                    <span
                       onClick={() => setIsGifPickerOpen(!isGifPickerOpen)}
                       className={`cursor-pointer text-[11px] font-black tracking-widest uppercase transition-colors hover:text-white ${isGifPickerOpen ? 'text-[#C800DF]' : ''}`}
                     >
@@ -1098,13 +1118,13 @@ export default function WeWatchRoomPage({
                     </span>
                     <AnimatePresence>
                       {isGifPickerOpen && (
-                        <motion.div 
+                        <motion.div
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: 10 }}
                           className="absolute bottom-10 left-0 z-50 flex h-80 w-72 flex-col rounded-2xl border border-white/10 bg-[#121214] p-3 shadow-2xl"
                         >
-                          <input 
+                          <input
                             type="text"
                             placeholder="Tìm GIF..."
                             value={gifSearch}
@@ -1114,7 +1134,7 @@ export default function WeWatchRoomPage({
                           />
                           <div className="scrollbar-hide grid flex-1 grid-cols-2 gap-2 overflow-y-auto">
                             {gifs.map((gif: any) => (
-                              <img 
+                              <img
                                 key={gif.id}
                                 src={gif.images.fixed_height_small.url}
                                 alt="gif"
@@ -1133,15 +1153,18 @@ export default function WeWatchRoomPage({
 
                   {/* Image Button */}
                   <div className="relative">
-                    <input 
-                      type="file" 
+                    <input
+                      type="file"
                       ref={fileInputRef}
-                      className="hidden" 
+                      className="hidden"
                       accept="image/*"
                       onChange={handleImageUpload}
                     />
                     {isUploading ? (
-                      <Loader2 size={18} className="animate-spin text-[#C800DF]" />
+                      <Loader2
+                        size={18}
+                        className="animate-spin text-[#C800DF]"
+                      />
                     ) : (
                       <ImageIcon
                         size={18}
@@ -1248,6 +1271,16 @@ export default function WeWatchRoomPage({
           </div>
         )}
       </AnimatePresence>
+
+      <ConfirmationModal
+        isOpen={!!kickTarget}
+        onClose={() => setKickTarget(null)}
+        onConfirm={() => kickTarget && kickMember(kickTarget)}
+        title="Mời ra khỏi phòng"
+        message={`Bạn có chắc chắn muốn mời ${kickTarget} ra khỏi phòng không?`}
+        confirmText="Mời ra"
+        type="danger"
+      />
     </main>
   );
 }
