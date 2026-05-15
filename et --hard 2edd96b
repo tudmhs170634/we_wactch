@@ -1,0 +1,50 @@
+[33m72f6258[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtrungnt[m[33m, [m[1;31morigin/trungnt[m[33m)[m HEAD@{0}: reset: moving to 72f62589bc94dcbeb312489b844257764e90ad7d
+[33m2edd96b[m HEAD@{1}: commit: revert and resolve
+[33m72f6258[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtrungnt[m[33m, [m[1;31morigin/trungnt[m[33m)[m HEAD@{2}: reset: moving to 72f62589bc94dcbeb312489b844257764e90ad7d
+[33md4cb6d7[m HEAD@{3}: reset: moving to d4cb6d7e674c493de2b5c5fb2d0a68ef78062f79
+[33m72f6258[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtrungnt[m[33m, [m[1;31morigin/trungnt[m[33m)[m HEAD@{4}: commit: add live
+[33ma3bd0df[m HEAD@{5}: commit: fix
+[33m393f91c[m HEAD@{6}: commit: fix
+[33m09c3dd6[m HEAD@{7}: commit: fix: update ci/cd to use vars
+[33m0fb5c69[m HEAD@{8}: commit: addgif,img, icon
+[33m82108b7[m HEAD@{9}: commit: y
+[33m62269de[m HEAD@{10}: commit: Fix: Prisma v7 compatibility
+[33m744e77b[m HEAD@{11}: commit: Simplify prisma config
+[33m1f90916[m HEAD@{12}: commit: Fix: Add DATABASE_URL to Prisma schema
+[33maa02643[m HEAD@{13}: commit: Switch to Neon DB
+[33m4a8e8d1[m HEAD@{14}: commit: Fix: Pass build arguments for Next.js environment variables
+[33m1248eec[m HEAD@{15}: pull origin client-server: Fast-forward
+[33m2d28a75[m HEAD@{16}: commit: Change frontend env file to .env
+[33ma7eb83c[m HEAD@{17}: commit: deploy
+[33mf2c25eb[m HEAD@{18}: commit: Fix backend start script path
+[33mf4f827e[m HEAD@{19}: commit: x
+[33m1110adf[m HEAD@{20}: commit: deploy
+[33m5bed844[m HEAD@{21}: pull origin client-server: Fast-forward
+[33m7f46e69[m HEAD@{22}: commit: fix
+[33mbbed4b3[m HEAD@{23}: commit: feat: optimize room real-time sync, security and crash detection
+[33me68b833[m HEAD@{24}: pull origin client-server: Fast-forward
+[33mdaa1896[m HEAD@{25}: commit: fix
+[33m35c6ba7[m HEAD@{26}: commit: fix
+[33m91686fe[m HEAD@{27}: commit: fix
+[33m0f7682f[m HEAD@{28}: pull origin client-server: Fast-forward
+[33m710f6d0[m HEAD@{29}: commit: admin
+[33m8740aad[m HEAD@{30}: commit: fix: getAllRooms now extracts rooms array from paginated response
+[33m19e3b0e[m HEAD@{31}: commit: fix: resolve remaining merge conflict in room.module.ts
+[33m56ba8cc[m HEAD@{32}: commit: fix: restore [id] route and update param names after merge
+[33m54da2b5[m HEAD@{33}: commit (merge): chore: resolve merge conflicts with origin/client-server
+[33ma996f81[m HEAD@{34}: commit: feat: modularize admin dashboard, integrate admin apis, and localize to Vietnamese
+[33m3107a46[m HEAD@{35}: pull origin client-server: Fast-forward
+[33m628fa10[m HEAD@{36}: commit: rooms
+[33m21f57c6[m HEAD@{37}: commit: new branch
+[33m7ff52a5[m[33m ([m[1;32mclient-server[m[33m)[m HEAD@{38}: checkout: moving from client-server to trungnt
+[33m7ff52a5[m[33m ([m[1;32mclient-server[m[33m)[m HEAD@{39}: commit: profile, cloudinary
+[33m90532d0[m HEAD@{40}: commit (merge): 'auth'
+[33m48776d8[m HEAD@{41}: commit: 'auth'
+[33m92c471f[m HEAD@{42}: pull origin client-server --rebase (finish): returning to refs/heads/client-server
+[33m92c471f[m HEAD@{43}: pull origin client-server --rebase (pick): add roomList, videoList
+[33m7af3020[m HEAD@{44}: pull origin client-server --rebase (start): checkout 7af302049225e00026bfe9ab9ff1499295d40993
+[33m737b76e[m HEAD@{45}: commit: add roomList, videoList
+[33md3c2a5f[m HEAD@{46}: commit: auth
+[33mdd552b6[m HEAD@{47}: commit: client-server
+[33mffcc8a7[m[33m ([m[1;32mmaster[m[33m)[m HEAD@{48}: checkout: moving from master to client-server
+[33mffcc8a7[m[33m ([m[1;32mmaster[m[33m)[m HEAD@{49}: commit (initial): init all
