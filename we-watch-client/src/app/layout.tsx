@@ -56,7 +56,7 @@ export default function RootLayout({
       lang="vi"
       className={`${inter.variable} ${overpassMono.variable} text-slate-200 antialiased`}
     >
-      <body className="flex min-h-screen flex-col overflow-x-hidden font-sans">
+      <body className="flex min-h-screen flex-col overflow-x-hidden font-sans" suppressHydrationWarning>
         <Providers>
           <main className="flex-1">{children}</main>
           <Footer />

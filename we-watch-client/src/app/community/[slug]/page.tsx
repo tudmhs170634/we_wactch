@@ -326,6 +326,7 @@ export default function CommunityRoomPage({
   );
   const isAdmin = user?.role === 'admin';
   const [isEndRoomModalOpen, setIsEndRoomModalOpen] = useState(false);
+  const [isHostEndModalOpen, setIsHostEndModalOpen] = useState(false);
   const [liveKitToken, setLiveKitToken] = useState<string>('');
 
   // Sub-group state
@@ -541,7 +542,7 @@ export default function CommunityRoomPage({
     try {
       socket?.emit('endRoom', { roomId: room.id });
       await deleteRoom(room.id);
-      setIsEndRoomModalOpen(false);
+      setIsHostEndModalOpen(false);
       router.push('/rooms');
       toast.success('Đã kết thúc phòng thành công');
     } catch (err) {
@@ -784,7 +785,7 @@ export default function CommunityRoomPage({
               <button
                 onClick={() =>
                   isHost
-                    ? setIsEndRoomModalOpen(true)
+                    ? setIsHostEndModalOpen(true)
                     : setIsLeaveModalOpen(true)
                 }
                 className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 hover:bg-red-500/30"
@@ -1823,8 +1824,8 @@ export default function CommunityRoomPage({
       />
 
       <ConfirmationModal
-        isOpen={isEndRoomModalOpen}
-        onClose={() => setIsEndRoomModalOpen(false)}
+        isOpen={isHostEndModalOpen}
+        onClose={() => setIsHostEndModalOpen(false)}
         onConfirm={handleEndRoom}
         title="Kết thúc phòng"
         message="Bạn có chắc chắn muốn kết thúc phòng? Tất cả người xem sẽ bị đưa ra ngoài và phòng sẽ không còn hoạt động."

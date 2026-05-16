@@ -35,12 +35,14 @@ import {
   ThumbsUp,
   Flame,
   FileImage,
+  ShieldAlert,
+  StopCircle,
 } from 'lucide-react';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { getRoom, getRoomBySlug } from '@/src/services/room';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { getRoom, getRoomBySlug, terminateRoom } from '@/src/services/room';
 import { getVideos } from '@/src/services/video';
 import { toast } from 'sonner';
 import { useSocket } from '@/src/hooks/useSocket';
@@ -72,6 +74,11 @@ export default function WeWatchRoomPage({
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [selectedQueueVideo, setSelectedQueueVideo] = useState<any>(null);
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+  
+  const searchParams = useSearchParams();
+  const isMonitorMode = searchParams.get('monitor') === 'true';
+  const [isEndRoomModalOpen, setIsEndRoomModalOpen] = useState(false);
+  const [endRoomReason, setEndRoomReason] = useState('Vi phạm bản quyền');
 
   const [room, setRoom] = useState<any>(null);
   const [password, setPassword] = useState<string | undefined>(undefined);
@@ -82,6 +89,7 @@ export default function WeWatchRoomPage({
     if (savedPassword) setPassword(savedPassword);
   }, [params.slug]);
   const {
+    socket,
     members: socketMembers,
     messages,
     emojis,
@@ -102,7 +110,32 @@ export default function WeWatchRoomPage({
     requestVideoSync,
     serverTimeOffset,
     kickMember,
-  } = useSocket(room?.id, user, password, () => router.push('/rooms'));
+  } = useSocket(room?.id, user, password, (reason?: string, stoppedBy?: string, stoppedByRole?: string) => {
+    const amIHost = room?.host?.username === user?.username || room?.hostId === user?.id;
+
+    if (amIHost && stoppedByRole === 'admin') {
+      const reasonText = reason ? ` Lý do: "${reason}".` : '';
+      toast.error(`Phiên live của bạn đã bị Admin dừng bởi ${reasonText}`, {
+        duration: 6000,
+        description: 'Bạn sẽ được chuyển về trang danh sách phòng.',
+      });
+      setTimeout(() => router.push('/rooms'), 3000);
+    } else if (!amIHost) {
+      const isAdmin = user?.role === 'admin';
+      if (!isAdmin) {
+        toast.info('Phiên live đã kết thúc.', {
+          description:
+            stoppedByRole === 'admin'
+              ? `Phiên đã bị Admin dừng. Bạn sẽ được chuyển về danh sách phòng.`
+              : 'Host đã dừng phiên. Bạn sẽ được chuyển về danh sách phòng.',
+          duration: 4000,
+        });
+      }
+      setTimeout(() => router.push('/rooms'), 1500);
+    } else {
+      router.push('/rooms');
+    }
+  });
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isHost, setIsHost] = useState(false);
@@ -356,6 +389,27 @@ export default function WeWatchRoomPage({
     setChatInput('');
   };
 
+  // Admin: Dừng phiên live từ chế độ giám sát
+  const handleEndRoomAsAdmin = () => {
+    if (!room) return;
+    setIsEndRoomModalOpen(true);
+  };
+
+  const confirmEndRoomAsAdmin = async () => {
+    if (!room) return;
+    try {
+      socket?.emit('endRoom', { roomId: room.id, reason: endRoomReason });
+      await terminateRoom(room.id, endRoomReason);
+      toast.success('Đã dừng phiên live vì vi phạm thành công!');
+    } catch (err) {
+      console.error('Admin end room error:', err);
+      toast.error('Không thể dừng phiên live');
+    } finally {
+      setIsEndRoomModalOpen(false);
+      router.push('/admin');
+    }
+  };
+
   const handleAddToRequest = (film: any) => {
     addVideoToWishlist({
       id: film.id,
@@ -466,13 +520,38 @@ export default function WeWatchRoomPage({
                 : 'Không tìm thấy phòng'}
           </h1>
           {room && (
-            <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
-              {room.type}
-            </span>
+            isMonitorMode ? (
+              <span className="flex items-center gap-1 rounded-md bg-orange-500/20 px-2 py-0.5 text-[10px] font-bold text-orange-400 uppercase">
+                <ShieldAlert size={10} /> Giám sát
+              </span>
+            ) : (
+              <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60 uppercase">
+                {room.type}
+              </span>
+            )
           )}
         </Link>
         <div className="flex items-center gap-3">
-          {room?.type === 'private' && room?.password && (
+          {/* Nút Dừng phiên live — chỉ hiện khi admin đang giám sát */}
+          {isMonitorMode && (
+            <button
+              onClick={handleEndRoomAsAdmin}
+              className="flex items-center gap-2 rounded-full bg-red-500 px-4 py-1.5 text-xs font-black text-white shadow-lg shadow-red-500/30 transition-all hover:scale-105 hover:bg-red-600"
+            >
+              <StopCircle size={14} /> Dừng phiên live
+            </button>
+          )}
+          {/* Nút Back về Admin */}
+          {isMonitorMode && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/10"
+            >
+              <ShieldAlert size={14} /> Admin
+            </Link>
+          )}
+
+          {room?.type === 'private' && room?.password && !isMonitorMode && (
             <div className="flex items-center gap-2 rounded-lg border border-dashed border-[#C800DF]/50 bg-[#C800DF]/10 px-3 py-1.5">
               <span className="font-mono text-xs font-black text-[#C800DF]">
                 Mật khẩu: {room.password}
@@ -480,40 +559,54 @@ export default function WeWatchRoomPage({
             </div>
           )}
 
-          <button
-            onClick={handleSync}
-            disabled={isSyncing}
-            className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
-          >
-            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-            <div className="flex flex-col items-start leading-tight">
-              <span>
-                {isSyncing
-                  ? 'Đang đồng bộ...'
-                  : syncDone
-                    ? 'Đã đồng bộ!'
-                    : 'Đồng bộ với Host'}
-              </span>
-              {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
-                <span
-                  className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
-                >
-                  Lệch: {timeOffset > 0 ? '+' : ''}
-                  {timeOffset.toFixed(1)}s
-                </span>
-              )}
-            </div>
-          </button>
+          {!isMonitorMode && (
+            <>
+              <button
+                onClick={handleSync}
+                disabled={isSyncing}
+                className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
+              >
+                <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+                <div className="flex flex-col items-start leading-tight">
+                  <span>
+                    {isSyncing
+                      ? 'Đang đồng bộ...'
+                      : syncDone
+                        ? 'Đã đồng bộ!'
+                        : 'Đồng bộ với Host'}
+                  </span>
+                  {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
+                    <span
+                      className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
+                    >
+                      Lệch: {timeOffset > 0 ? '+' : ''}
+                      {timeOffset.toFixed(1)}s
+                    </span>
+                  )}
+                </div>
+              </button>
 
-          <button
-            onClick={() => setIsLeaveModalOpen(true)}
-            className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30"
-          >
-            <LogOut size={14} />
-            {isHost ? 'Rời phòng' : 'Rời phòng'}
-          </button>
+              <button
+                onClick={() => setIsLeaveModalOpen(true)}
+                className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/30"
+              >
+                <LogOut size={14} />
+                {isHost ? 'Rời phòng' : 'Rời phòng'}
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Monitor Mode Banner */}
+      {isMonitorMode && (
+        <div className="flex h-8 flex-shrink-0 items-center gap-2 border-b border-orange-500/20 bg-orange-500/5 px-6">
+          <ShieldAlert size={12} className="text-orange-400" />
+          <span className="text-[11px] font-bold text-orange-400">
+            Chế độ Giám sát Admin — Bạn đang theo dõi phòng này. Click vào tin nhắn để xoá hoặc cấm chat.
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-1 gap-4 overflow-hidden p-4">
         {/* LEFT SIDEBAR */}
@@ -1399,6 +1492,96 @@ export default function WeWatchRoomPage({
                   className="w-full rounded-xl bg-white/5 py-3 text-sm font-bold text-white/60 transition-all hover:bg-white/10 active:scale-95"
                 >
                   Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* End Room Reason Modal (Admin) */}
+      <AnimatePresence>
+        {isEndRoomModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsEndRoomModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="glass relative w-full max-w-md overflow-hidden rounded-[32px] border border-red-500/30 bg-[#121214] p-8 shadow-2xl shadow-red-900/20"
+            >
+              <div className="mb-4 flex justify-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                  <ShieldAlert size={32} />
+                </div>
+              </div>
+              <h3 className="mb-2 text-center text-xl font-bold text-white">
+                Dừng phiên live
+              </h3>
+              <p className="mb-6 text-center text-sm leading-relaxed text-white/60">
+                Vui lòng chọn lý do dừng phiên live của phòng "{room?.title}".
+                Người xem sẽ bị đưa ra ngoài ngay lập tức.
+              </p>
+
+              <div className="mb-6 flex flex-col gap-2">
+                {[
+                  'Vi phạm bản quyền',
+                  'Nội dung bạo lực, máu me, đánh nhau',
+                  'Nội dung 18+',
+                  'Livestream cờ bạc, cá độ',
+                  'Chửi bới cực đoan',
+                  'Lý do khác',
+                ].map((reason) => (
+                  <label
+                    key={reason}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-all ${
+                      endRoomReason === reason
+                        ? 'border-red-500 bg-red-500/10'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    }`}
+                  >
+                    <div
+                      className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                        endRoomReason === reason
+                          ? 'border-red-500'
+                          : 'border-white/40'
+                      }`}
+                    >
+                      {endRoomReason === reason && (
+                        <div className="h-2 w-2 rounded-full bg-red-500" />
+                      )}
+                    </div>
+                    <span className="text-sm text-white/90">{reason}</span>
+                    <input
+                      type="radio"
+                      name="endRoomReason"
+                      value={reason}
+                      checked={endRoomReason === reason}
+                      onChange={(e) => setEndRoomReason(e.target.value)}
+                      className="hidden"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={confirmEndRoomAsAdmin}
+                  className="w-full rounded-2xl bg-red-500 py-4 text-sm font-bold text-white transition-all hover:bg-red-600 active:scale-95"
+                >
+                  Xác nhận dừng phiên live
+                </button>
+                <button
+                  onClick={() => setIsEndRoomModalOpen(false)}
+                  className="w-full rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10 active:scale-95"
+                >
+                  Hủy
                 </button>
               </div>
             </motion.div>
