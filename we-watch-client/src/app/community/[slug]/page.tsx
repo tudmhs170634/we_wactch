@@ -26,6 +26,7 @@ import {
   SubGroupRoom,
   SubGroupView,
   SubGroupMicToggle,
+  StreamMode,
 } from '@/src/components/rooms/LiveKitRoom';
 import { useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
@@ -66,6 +67,8 @@ import {
   ShieldAlert,
   StopCircle,
   Search,
+  Film,
+  FileText,
 } from 'lucide-react';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -328,6 +331,7 @@ export default function CommunityRoomPage({
   const [isEndRoomModalOpen, setIsEndRoomModalOpen] = useState(false);
   const [isHostEndModalOpen, setIsHostEndModalOpen] = useState(false);
   const [liveKitToken, setLiveKitToken] = useState<string>('');
+  const [streamMode, setStreamMode] = useState<StreamMode>('GAMING');
 
   // Sub-group state
   const [subGroupId, setSubGroupId] = useState<string>('');
@@ -814,6 +818,7 @@ export default function CommunityRoomPage({
         onDisconnect={() => setLiveKitToken('')}
         video={isHost}
         audio={isHost}
+        streamMode={streamMode}
       >
         <div className="flex flex-1 gap-4 overflow-hidden p-4">
           {/* LEFT SIDEBAR */}
@@ -1072,6 +1077,36 @@ export default function CommunityRoomPage({
                       exit={{ height: 0, opacity: 0 }}
                       className="flex flex-col gap-3 p-4"
                     >
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">
+                          Chế độ livestream
+                        </span>
+                        <div className="flex flex-col gap-1.5">
+                          {[
+                            { id: 'GAMING', label: 'GAMING (60 FPS)', icon: <MonitorPlay size={14} />, desc: 'Chuyển động mượt' },
+                            { id: 'CINEMA', label: 'CINEMA (HQ)', icon: <Film size={14} />, desc: 'Độ nét cao 1080p' },
+                            { id: 'SHARING', label: 'SHARING (TEXT)', icon: <FileText size={14} />, desc: 'Ưu tiên văn bản' }
+                          ].map((mode) => (
+                            <button
+                              key={mode.id}
+                              onClick={() => setStreamMode(mode.id as any)}
+                              className={`flex items-center gap-3 rounded-xl border p-2.5 text-left transition-all ${
+                                streamMode === mode.id 
+                                  ? 'border-[#C800DF] bg-[#C800DF]/10 text-white shadow-[0_0_15px_rgba(200,0,223,0.15)]' 
+                                  : 'border-white/5 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80'
+                              }`}
+                            >
+                              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${streamMode === mode.id ? 'bg-[#C800DF]/20 text-[#C800DF]' : 'bg-white/5'}`}>
+                                {mode.icon}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[11px] font-bold">{mode.label}</span>
+                                <span className="text-[9px] opacity-50">{mode.desc}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="flex flex-col gap-1.5">
                         <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">
                           Chế độ phòng
