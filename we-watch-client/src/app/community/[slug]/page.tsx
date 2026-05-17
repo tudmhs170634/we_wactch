@@ -498,6 +498,13 @@ export default function CommunityRoomPage({
   }, [socketMembers, room?.host?.username]);
 
   const [isHydrated, setIsHydrated] = useState(false);
+  const [hostQuality, setHostQuality] = useState<number>(3); // Mặc định là 3 (Excellent)
+
+  useEffect(() => {
+    const handleQuality = (e: any) => setHostQuality(e.detail.quality);
+    window.addEventListener('host-network-quality', handleQuality);
+    return () => window.removeEventListener('host-network-quality', handleQuality);
+  }, []);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -646,6 +653,8 @@ export default function CommunityRoomPage({
 
   const spawnEmoji = (emoji: string) => {
     sendEmoji(emoji);
+    // Phát event cho LiveKitControls/GlobalReactions gửi qua LiveKit
+    window.dispatchEvent(new CustomEvent('trigger-reaction', { detail: { emoji } }));
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -880,7 +889,7 @@ export default function CommunityRoomPage({
         onDisconnect={() => setLiveKitToken('')}
         video={isHost}
         audio={isHost}
-        audioMuted={useHls}
+        audioMuted={false}
         streamMode={streamMode}
       >
         <div className="flex flex-col lg:flex-row flex-1 gap-4 overflow-y-auto lg:overflow-hidden p-0 lg:p-4">
@@ -1202,117 +1211,8 @@ export default function CommunityRoomPage({
                 <>
                   <HLSReceiver onHlsUrl={setHlsUrl} />
                   <ScreenShareTracker onStateChange={setIsLiveActive} />
-                  {!isHost && hlsUrl && useHls ? (
-                    <>
-                      <div className="absolute inset-0 z-0">
-                        <VideoPlayer
-                          src={hlsUrl}
-                          poster={room?.video?.thumbnailUrl}
-                          liveSessionDuration={liveSessionDuration}
-                          onGoLive={() => {
-                            setUseHls(false);
-                            setInitialSeek(undefined);
-                          }}
-                          initialSeek={initialSeek}
-                          onAction={() => {}}
-                          lastAction={null}
-                          initialState={null}
-                          onOffsetChange={() => {}}
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                       <LiveKitScreenView />
+                  <LiveKitScreenView />
 
-                      
-                      {/* Giao diện điều khiển giả lập HLS (YouTube style) */}
-                      <div className="absolute inset-0 z-10 flex flex-col justify-end bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        {/* Buttons */}
-                        <div className="flex items-center gap-3 px-4 pb-2">
-                          <button className="text-white transition-colors hover:text-pink-400">
-                            <Pause className="h-6 w-6" />
-                          </button>
-                          <button className="text-white transition-colors hover:text-pink-400">
-                            <Volume2 className="h-5 w-5" />
-                          </button>
-                          
-                          {/* Live Badge */}
-                          <div className="flex items-center gap-1.5 rounded-md px-2 py-1">
-                            <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                            <span className="text-xs font-bold text-white">LIVE</span>
-                          </div>
-
-                          <span className="flex-1 text-xs font-bold text-white/60">
-                            {/* Trống vì đang Live */}
-                          </span>
-
-                          <button className="text-white transition-colors hover:text-pink-400">
-                            <Settings className="h-5 w-5" />
-                          </button>
-                          <button className="text-white transition-colors hover:text-pink-400">
-                            <Maximize className="h-5 w-5" />
-                          </button>
-                        </div>
-
-                        {/* Progress bar (YouTube style at the very bottom) */}
-                        {!isHost && (
-                          <div
-                            onClick={(e) => {
-                              if (hlsUrl) {
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                const pos = (e.clientX - rect.left) / rect.width;
-                                setInitialSeek(pos);
-                                setUseHls(true);
-                              } else {
-                                toast.error('Luồng Tua (HLS) chưa sẵn sàng, vui lòng đợi vài giây!');
-                              }
-                            }}
-                            onMouseMove={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const pos = (e.clientX - rect.left) / rect.width;
-                              
-                              const formatTime = (secs: number) => {
-                                const h = Math.floor(secs / 3600);
-                                const m = Math.floor((secs % 3600) / 60);
-                                const s = Math.floor(secs % 60);
-                                return h > 0 
-                                  ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-                                  : `${m}:${s.toString().padStart(2, '0')}`;
-                              };
-
-                              // Sử dụng bộ đếm thời gian tự tăng thay vì thời gian từ server
-                              setTooltipTime(formatTime(pos * liveSessionDuration));
-                              setTooltipLeft(e.clientX - rect.left);
-                              setShowTooltip(true);
-                            }}
-                            onMouseLeave={() => setShowTooltip(false)}
-                            className={`group/bar relative h-1.5 w-full transition-all ${hlsUrl ? 'cursor-pointer bg-white/20' : 'cursor-not-allowed bg-white/5'}`}
-                            title={hlsUrl ? "Bấm vào đây để Tua lại" : "Đang khởi tạo luồng Tua (HLS)..."}
-                          >
-                            {/* Chấm tròn đỏ (Thumb) khi hover */}
-                            <div className="absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1/2 scale-0 rounded-full bg-red-500 transition-transform group-hover/bar:scale-100" style={{ right: '0%' }} />
-                            
-                            {/* Tooltip hiển thị thời gian */}
-                            {showTooltip && (
-                              <div 
-                                className="absolute bottom-4 z-50 -translate-x-1/2 rounded bg-black/80 px-2 py-1 text-xs font-bold text-white backdrop-blur-sm"
-                                style={{ left: `${tooltipLeft}px` }}
-                              >
-                                {tooltipTime}
-                              </div>
-                            )}
-
-                            {/* Thanh màu đỏ/xám lấp đầy */}
-                            <div
-                              className={`h-full ${hlsUrl ? 'bg-red-500' : 'bg-gray-500'}`}
-                              style={{ width: '100%' }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
                 </>
               )}
 
@@ -1336,10 +1236,18 @@ export default function CommunityRoomPage({
               )}
 
               <div className="pointer-events-none absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 backdrop-blur-md">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
-                </span>
+                {/* Host Network Indicator instead of Red Dot */}
+                <div className="flex items-end gap-0.5 bg-black/40 p-0.5 rounded-sm">
+                  <div className={`w-0.5 h-1 ${
+                    hostQuality === 0 ? 'bg-red-500' : hostQuality === 1 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`} />
+                  <div className={`w-0.5 h-1.5 ${
+                    hostQuality === 0 ? 'bg-white/20' : hostQuality === 1 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`} />
+                  <div className={`w-0.5 h-2 ${
+                    hostQuality === 0 || hostQuality === 1 ? 'bg-white/20' : 'bg-green-500'
+                  }`} />
+                </div>
                 <span className="text-xs font-bold text-white">Live</span>
                 <Users size={12} className="text-white/60" />
                 <span className="text-xs font-bold text-white">

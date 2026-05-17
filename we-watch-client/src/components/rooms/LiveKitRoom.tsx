@@ -15,7 +15,7 @@ import {
   useIsSpeaking,
   useRoomContext,
 } from '@livekit/components-react';
-import { Track, VideoQuality, VideoPresets, RemoteTrackPublication, VideoPreset, LocalVideoTrack } from 'livekit-client';
+import { Track, VideoQuality, VideoPresets, RemoteTrackPublication, VideoPreset, LocalVideoTrack, ConnectionQuality } from 'livekit-client';
 import { 
   Mic, 
   MicOff, 
@@ -28,7 +28,11 @@ import {
   Minimize,
   MonitorPlay,
   Film,
-  FileText
+  FileText,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -308,7 +312,11 @@ function CustomControlBar() {
     <div className="absolute top-2 right-4 z-50 flex gap-2">
       <button
         onClick={() =>
-          localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+          localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled, {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          })
         }
         className={`flex h-8 w-8 items-center justify-center rounded-full transition-all ${
           isMicrophoneEnabled
@@ -328,6 +336,93 @@ function CustomControlBar() {
       >
         {isCameraEnabled ? <Video size={14} /> : <VideoOff size={14} />}
       </button>
+    </div>
+  );
+}
+
+// ─── Global Reactions Component (Always active in the room) ───────────────────
+function GlobalReactions() {
+  const [reactions, setReactions] = React.useState<{ id: string; emoji: string }[]>([]);
+  const room = useRoomContext();
+  const { localParticipant } = useLocalParticipant();
+
+  React.useEffect(() => {
+    const handleTrigger = (e: any) => {
+      const emoji = e.detail.emoji;
+      const data = new TextEncoder().encode(JSON.stringify({ type: 'reaction', emoji }));
+      localParticipant.publishData(data, { reliable: false });
+      // Cũng phát ra local-reaction để hiển thị cho chính mình
+      window.dispatchEvent(new CustomEvent('local-reaction', { detail: { emoji } }));
+    };
+    window.addEventListener('trigger-reaction', handleTrigger);
+    return () => window.removeEventListener('trigger-reaction', handleTrigger);
+  }, [localParticipant]);
+
+  React.useEffect(() => {
+    const handleData = (payload: Uint8Array) => {
+      try {
+        const data = JSON.parse(new TextDecoder().decode(payload));
+        if (data.type === 'reaction') {
+          const id = Math.random().toString(36).substring(2, 9);
+          setReactions((prev) => [...prev, { id, emoji: data.emoji }]);
+          setTimeout(() => {
+            setReactions((prev) => prev.filter((r) => r.id !== id));
+          }, 3000);
+        }
+      } catch (e) {
+        // Ignore
+      }
+    };
+    room.on('dataReceived', handleData);
+    return () => {
+      room.off('dataReceived', handleData);
+    };
+  }, [room]);
+
+  React.useEffect(() => {
+    const handleLocal = (e: any) => {
+      const id = Math.random().toString(36).substring(2, 9);
+      setReactions((prev) => [...prev, { id, emoji: e.detail.emoji }]);
+      setTimeout(() => {
+        setReactions((prev) => prev.filter((r) => r.id !== id));
+      }, 3000);
+    };
+    window.addEventListener('local-reaction', handleLocal);
+    return () => window.removeEventListener('local-reaction', handleLocal);
+  }, []);
+
+  return (
+    <div className="absolute right-4 bottom-16 w-32 h-[80%] pointer-events-none z-50 overflow-hidden">
+      {reactions.map((r) => (
+        <div
+          key={r.id}
+          className="absolute bottom-0 text-3xl animate-float-up"
+          style={{
+            left: `${10 + Math.random() * 80}%`,
+          }}
+        >
+          {r.emoji}
+        </div>
+      ))}
+      <style>{`
+        @keyframes floatUp {
+          0% {
+            transform: translateY(0) scale(0.5);
+            opacity: 0;
+          }
+          10% {
+            opacity: 1;
+            transform: translateY(-20px) scale(1);
+          }
+          100% {
+            transform: translateY(-400px) scale(1.2);
+            opacity: 0;
+          }
+        }
+        .animate-float-up {
+          animation: floatUp 3s ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 }
@@ -358,18 +453,19 @@ export function LiveKitProvider({
         dynacast: true,
         publishDefaults: {
           simulcast: true,
+          videoCodec: 'vp9',
           videoSimulcastLayers: [
             new VideoPreset(1920, 1080, 8_000_000, 60),
             new VideoPreset(1280, 720, 3_000_000, 30),
             new VideoPreset(640, 360, 800_000, 20),
           ],
           screenShareSimulcastLayers: [
-            new VideoPreset(1920, 1080, 10_000_000, 60),
-            new VideoPreset(1280, 720, 4_000_000, 30),
+            new VideoPreset(1920, 1080, 8_000_000, 60),
+            new VideoPreset(1280, 720, 3_000_000, 30),
             new VideoPreset(640, 360, 1_000_000, 20),
           ],
           screenShareEncoding: {
-            maxBitrate: 10_000_000,
+            maxBitrate: 8_000_000,
             maxFramerate: 60,
           },
         },
@@ -382,6 +478,7 @@ export function LiveKitProvider({
       className="flex h-full w-full flex-col"
     >
       {children}
+      <GlobalReactions />
       {streamMode && <StreamSettingsUpdater mode={streamMode} />}
       {!audioMuted && <RoomAudioRenderer />}
     </LKRoom>
@@ -420,6 +517,82 @@ export function SubGroupRoom({
   );
 }
 
+// Component điều khiển volume riêng cho Camera (Mic)
+function CameraVolumeControl({ participant }: { participant: any }) {
+  const micTracks = useTracks([
+    { source: Track.Source.Microphone, withPlaceholder: false },
+  ]);
+  
+  const trackRef = micTracks.find((t) => t.participant.identity === participant.identity);
+  const [volume, setVolume] = useState(1);
+  const [prevVolume, setPrevVolume] = useState(1);
+
+  React.useEffect(() => {
+    if (trackRef?.publication?.track) {
+      const track = trackRef.publication.track;
+      
+      // Chỉnh Volume
+      if (typeof (track as any).setVolume === 'function') {
+        try {
+          (track as any).setVolume(volume);
+        } catch (e) {
+          console.error('Lỗi khi set volume cho mic:', e);
+        }
+      }
+      
+      // Tăng Buffer (Playout Delay) lên 2.5s để mượt hình/tiếng
+      if ('setPlayoutDelay' in track) {
+        (track as any).setPlayoutDelay(2.5);
+      }
+    }
+  }, [trackRef, volume]);
+
+  if (!trackRef || participant.isLocal) return null;
+
+  const isMuted = volume === 0;
+
+  const toggleMute = () => {
+    if (volume > 0) {
+      setPrevVolume(volume);
+      setVolume(0);
+    } else {
+      setVolume(prevVolume || 1);
+    }
+  };
+
+  return (
+    <div className="absolute bottom-2 left-2 z-30 flex items-center gap-1.5 bg-black/70 backdrop-blur-sm px-2 py-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleMute();
+        }}
+        className="focus:outline-none"
+        title={isMuted ? "Bật âm thanh" : "Tắt âm thanh"}
+      >
+        {isMuted ? (
+          <VolumeX size={12} className="text-red-500 hover:text-red-400 transition-colors" />
+        ) : (
+          <Volume2 size={12} className="text-white/70 hover:text-white transition-colors" />
+        )}
+      </button>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.1"
+        value={volume}
+        onChange={(e) => {
+          e.stopPropagation();
+          setVolume(parseFloat(e.target.value));
+        }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-12 h-1 accent-white cursor-pointer"
+      />
+    </div>
+  );
+}
+
 // ─── Camera view (all participants) ─────────────────────────────────────────
 export function LiveKitCameraView() {
   const tracks = useTracks([
@@ -431,9 +604,10 @@ export function LiveKitCameraView() {
       {tracks.map((track: TrackReferenceOrPlaceholder) => (
         <div
           key={`${track.participant.identity}_${track.source}`}
-          className="relative aspect-video h-full flex-shrink-0"
+          className="relative aspect-video h-full flex-shrink-0 group"
         >
           <ParticipantTile trackRef={track} />
+          <CameraVolumeControl participant={track.participant} />
         </div>
       ))}
     </div>
@@ -504,12 +678,38 @@ function StreamStatsOverlay({ trackRef }: { trackRef: TrackReferenceOrPlaceholde
     return () => clearInterval(interval);
   }, [trackRef]);
 
+  React.useEffect(() => {
+    const quality = trackRef.participant.connectionQuality;
+    // LiveKit ConnectionQuality enum: Poor=0, Good=1, Excellent=2, Unknown=3
+    window.dispatchEvent(new CustomEvent('host-network-quality', { detail: { quality } }));
+  }, [trackRef.participant.connectionQuality]);
+
   if (!isVisible) return null;
 
   return (
     <div className="absolute top-4 left-4 z-50 pointer-events-none select-none flex flex-col gap-2">
       <div className="flex items-center gap-2 bg-black/60 backdrop-blur-xl px-3 py-1.5 rounded-full border border-white/10 shadow-2xl">
-        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+        {/* Host Network Indicator replacing the green dot */}
+        <div className="flex items-end gap-0.5 bg-black/40 p-0.5 rounded-sm">
+          <div className={`w-0.5 h-1 ${
+            trackRef.participant.connectionQuality === ConnectionQuality.Poor || 
+            trackRef.participant.connectionQuality === ConnectionQuality.Good || 
+            trackRef.participant.connectionQuality === ConnectionQuality.Excellent 
+              ? (trackRef.participant.connectionQuality === ConnectionQuality.Poor ? 'bg-red-500' : trackRef.participant.connectionQuality === ConnectionQuality.Good ? 'bg-yellow-500' : 'bg-green-500') 
+              : 'bg-white/20'
+          }`} />
+          <div className={`w-0.5 h-1.5 ${
+            trackRef.participant.connectionQuality === ConnectionQuality.Good || 
+            trackRef.participant.connectionQuality === ConnectionQuality.Excellent 
+              ? (trackRef.participant.connectionQuality === ConnectionQuality.Good ? 'bg-yellow-500' : 'bg-green-500') 
+              : 'bg-white/20'
+          }`} />
+          <div className={`w-0.5 h-2 ${
+            trackRef.participant.connectionQuality === ConnectionQuality.Excellent 
+              ? 'bg-green-500' 
+              : 'bg-white/20'
+          }`} />
+        </div>
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-bold font-mono text-white tracking-wider">
             {stats.bitrate > 0 ? `${stats.bitrate.toFixed(1)} Mbps` : 'LIVE'}
@@ -532,6 +732,24 @@ export function LiveKitScreenView() {
   );
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+  const [isPaused, setIsPaused] = React.useState(false);
+  const [volume, setVolume] = React.useState(1);
+  const [isMuted, setIsMuted] = React.useState(false);
+  const room = useRoomContext();
+  const { localParticipant } = useLocalParticipant();
+
+  const sendReaction = (emoji: string) => {
+    const data = new TextEncoder().encode(JSON.stringify({ type: 'reaction', emoji }));
+    localParticipant.publishData(data, { reliable: false });
+    // Phát event cho GlobalReactions hiển thị cho chính mình
+    window.dispatchEvent(new CustomEvent('local-reaction', { detail: { emoji } }));
+  };
+
+  React.useEffect(() => {
+    if (!tracks[0]?.participant) return;
+    const quality = tracks[0].participant.connectionQuality;
+    window.dispatchEvent(new CustomEvent('host-network-quality', { detail: { quality } }));
+  }, [tracks[0]?.participant?.connectionQuality]);
 
   React.useEffect(() => {
     const handleFullscreenChange = () => {
@@ -541,6 +759,14 @@ export function LiveKitScreenView() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  React.useEffect(() => {
+    const track = tracks[0]?.publication?.track;
+    if (track && 'setPlayoutDelay' in track) {
+      console.log('[LiveKit] Thiết lập playout delay 2.5s cho Screen Share');
+      (track as any).setPlayoutDelay(2.5); // 2.5 giây buffer
+    }
+  }, [tracks]);
+
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
@@ -549,6 +775,39 @@ export function LiveKitScreenView() {
       });
     } else {
       document.exitFullscreen();
+    }
+  };
+
+  const togglePause = () => {
+    const videoEl = containerRef.current?.querySelector('video');
+    if (videoEl) {
+      if (isPaused) {
+        videoEl.play();
+      } else {
+        videoEl.pause();
+      }
+      setIsPaused(!isPaused);
+    }
+  };
+
+  const handleVolumeChange = (newVolume: number) => {
+    setVolume(newVolume);
+    setIsMuted(newVolume === 0);
+    
+    // Tìm tất cả thẻ audio trong trang (vì RoomAudioRenderer tạo audio riêng)
+    const audioEls = document.querySelectorAll('audio');
+    audioEls.forEach(el => el.volume = newVolume);
+    
+    // Cũng chỉnh luôn volume của video nếu có
+    const videoEl = containerRef.current?.querySelector('video');
+    if (videoEl) videoEl.volume = newVolume;
+  };
+
+  const toggleMute = () => {
+    if (isMuted) {
+      handleVolumeChange(volume || 1);
+    } else {
+      handleVolumeChange(0);
     }
   };
 
@@ -565,21 +824,75 @@ export function LiveKitScreenView() {
         style={{ width: '100%', height: '100%' }}
       />
       
+
+      
       <StreamStatsOverlay trackRef={tracks[0]} />
       
-      <div className="absolute bottom-6 right-6 z-30 opacity-0 transition-opacity group-hover/live:opacity-100 flex items-center gap-3">
-        {!tracks[0].participant.isLocal && <QualitySelector trackRef={tracks[0]} />}
-        
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleFullscreen();
-          }}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-white transition-all hover:bg-white/20 active:scale-90"
-          title={isFullscreen ? "Thu nhỏ" : "Toàn màn hình"}
-        >
-          {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-        </button>
+      {/* Overlay Controls */}
+      <div className="absolute inset-0 z-20 flex flex-col justify-end bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover/live:opacity-100 transition-opacity duration-300">
+        <div className="flex items-center gap-3 px-4 pb-4">
+          {/* Pause/Play */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePause();
+            }}
+            className="text-white transition-colors hover:text-pink-400"
+            title={isPaused ? "Phát" : "Tạm dừng"}
+          >
+            {isPaused ? <Play className="h-6 w-6" /> : <Pause className="h-6 w-6" />}
+          </button>
+
+          {/* Volume */}
+          <div className="flex items-center gap-2 group/volume">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMute();
+              }}
+              className="text-white transition-colors hover:text-pink-400"
+              title={isMuted ? "Bật âm thanh" : "Tắt âm thanh"}
+            >
+              {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={isMuted ? 0 : volume}
+              onChange={(e) => {
+                e.stopPropagation();
+                handleVolumeChange(parseFloat(e.target.value));
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-0 scale-x-0 transition-all group-hover/volume:w-20 group-hover/volume:scale-x-100 origin-left h-1 accent-white"
+            />
+          </div>
+
+          {/* Live Badge */}
+          <div className="flex items-center gap-1.5 rounded-md px-2 py-1">
+            <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-xs font-bold text-white">LIVE</span>
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Quality Selector */}
+          {!tracks[0].participant.isLocal && <QualitySelector trackRef={tracks[0]} />}
+
+          {/* Fullscreen */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFullscreen();
+            }}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-white transition-all hover:bg-white/20 active:scale-90"
+            title={isFullscreen ? "Thu nhỏ" : "Toàn màn hình"}
+          >
+            {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -623,9 +936,25 @@ function SubGroupParticipantBubble({
   avatarUrl?: string;
 }) {
   const isSpeaking = useIsSpeaking(participant);
+  const micTracks = useTracks([
+    { source: Track.Source.Microphone, withPlaceholder: false },
+  ]);
+  
+  const trackRef = micTracks.find((t) => t.participant.identity === participant.identity);
+  const [volume, setVolume] = useState(1);
+
+  React.useEffect(() => {
+    if (trackRef?.publication?.track && typeof (trackRef.publication.track as any).setVolume === 'function') {
+      try {
+        (trackRef.publication.track as any).setVolume(volume);
+      } catch (e) {
+        console.error('Lỗi khi set volume cho subgroup mic:', e);
+      }
+    }
+  }, [trackRef, volume]);
 
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="flex flex-col items-center gap-1.5 group relative">
       <div
         className={`relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
           isSpeaking
@@ -650,6 +979,43 @@ function SubGroupParticipantBubble({
             </div>
           )}
         </div>
+        
+        {/* Volume slider on hover (Tooltip style) */}
+        {!participant.isLocal && trackRef && (
+          <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-black/90 backdrop-blur-md px-2.5 py-1.5 rounded-xl opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-2xl border border-white/10 scale-75 group-hover:scale-100 origin-bottom pointer-events-none group-hover:pointer-events-auto">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setVolume(volume > 0 ? 0 : 1);
+              }}
+              className="text-white/70 hover:text-white transition-colors"
+              title={volume === 0 ? "Bật tiếng" : "Tắt tiếng"}
+            >
+              {volume === 0 ? <VolumeX size={12} className="text-red-500" /> : <Volume2 size={12} />}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.1"
+              value={volume}
+              onChange={(e) => {
+                e.stopPropagation();
+                setVolume(parseFloat(e.target.value));
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-16 h-1 accent-white cursor-pointer"
+            />
+            <span className="text-[10px] font-bold font-mono text-white/90 min-w-[24px] text-right">
+              {Math.round(volume * 100)}%
+            </span>
+            {/* Arrow */}
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-black/90 rotate-45 border-r border-b border-white/10" />
+            {/* Bridge to prevent losing hover */}
+            <div className="absolute -bottom-3 left-0 right-0 h-3 bg-transparent" />
+          </div>
+        )}
+
         {/* Mic badge */}
         <div
           className={`absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full border border-[#12121A] ${participant.isMicrophoneEnabled ? 'bg-green-500' : 'bg-red-500'}`}
@@ -661,9 +1027,33 @@ function SubGroupParticipantBubble({
           )}
         </div>
       </div>
-      <span className="max-w-[56px] truncate text-[10px] font-semibold text-white/50">
-        {participant.identity}
-      </span>
+      <div className="flex items-center gap-1 max-w-[56px]">
+        <span className="truncate text-[10px] font-semibold text-white/50">
+          {participant.identity}
+        </span>
+        
+        {/* Network Quality Indicator */}
+        <div className="flex items-end gap-0.5 bg-black/40 p-0.5 rounded-sm flex-shrink-0">
+          <div className={`w-0.5 h-1 ${
+            participant.connectionQuality === ConnectionQuality.Poor || 
+            participant.connectionQuality === ConnectionQuality.Good || 
+            participant.connectionQuality === ConnectionQuality.Excellent 
+              ? (participant.connectionQuality === ConnectionQuality.Poor ? 'bg-red-500' : participant.connectionQuality === ConnectionQuality.Good ? 'bg-yellow-500' : 'bg-green-500') 
+              : 'bg-white/20'
+          }`} />
+          <div className={`w-0.5 h-1.5 ${
+            participant.connectionQuality === ConnectionQuality.Good || 
+            participant.connectionQuality === ConnectionQuality.Excellent 
+              ? (participant.connectionQuality === ConnectionQuality.Good ? 'bg-yellow-500' : 'bg-green-500') 
+              : 'bg-white/20'
+          }`} />
+          <div className={`w-0.5 h-2 ${
+            participant.connectionQuality === ConnectionQuality.Excellent 
+              ? 'bg-green-500' 
+              : 'bg-white/20'
+          }`} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -702,7 +1092,11 @@ export function SubGroupMicToggle() {
   return (
     <button
       onClick={() =>
-        localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+        localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled, {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        })
       }
       className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold transition-all ${
         isMicrophoneEnabled
@@ -737,7 +1131,11 @@ export function LiveKitControls({
       {(!isHost && mode === 'private') || isHost ? (
         <button
           onClick={() =>
-            localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)
+            localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled, {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            })
           }
           className={`flex h-8 w-8 items-center justify-center rounded-full transition-all ${
             isMicrophoneEnabled
@@ -780,34 +1178,7 @@ export function LiveKitControls({
                   }
                 });
 
-                // Bật Egress nếu là phòng community (Gọi ngay không cần chờ track)
-                if (enabled && mode === 'community') {
-                  console.log('[Egress] Đang gọi API start-egress cho phòng:', roomName);
-                  try {
-                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/livekit/start-egress`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${useAuthStore.getState().token}`,
-                      },
-                      body: JSON.stringify({ roomName }),
-                    });
-                    const data = await res.json();
-                    console.log('[Egress] Response:', data);
-                    
-                    // Phát tán link HLS cho người xem qua Data Channel
-                    if (data.hlsUrl) {
-                      const encoder = new TextEncoder();
-                      const payload = JSON.stringify({ type: 'hls_url', url: data.hlsUrl });
-                      await localParticipant.publishData(encoder.encode(payload), {
-                        reliable: true,
-                      });
-                      console.log('[Egress] Đã phát tán link HLS');
-                    }
-                  } catch (e) {
-                    console.error('[Egress] Lỗi khi gọi API start-egress:', e);
-                  }
-                }
+
 
                 if (enabled && pub && (pub as any).track) {
                   const settings = (pub as any).track.mediaStreamTrack.getSettings();
