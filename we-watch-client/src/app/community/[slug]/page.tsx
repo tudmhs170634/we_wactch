@@ -23,9 +23,11 @@ import {
   LiveKitScreenView,
   LiveKitControls,
   MiniRoomView,
+  HLSReceiver,
   SubGroupRoom,
   SubGroupView,
   SubGroupMicToggle,
+  StreamMode,
 } from '@/src/components/rooms/LiveKitRoom';
 import { useTracks } from '@livekit/components-react';
 import { Track } from 'livekit-client';
@@ -66,10 +68,13 @@ import {
   ShieldAlert,
   StopCircle,
   Search,
+  Film,
+  FileText,
 } from 'lucide-react';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import Hls from 'hls.js';
 import { ConfirmationModal } from '@/src/components/rooms/ConfirmationModal';
 
 // --- HELPER COMPONENTS ---
@@ -252,6 +257,36 @@ export default function CommunityRoomPage({
   const [syncDone, setSyncDone] = useState(false);
   const [loading, setLoading] = useState(true);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null);
+  const [useHls, setUseHls] = useState(false);
+  const [initialSeek, setInitialSeek] = useState<number | undefined>(undefined);
+  const [tooltipTime, setTooltipTime] = useState('');
+  const [tooltipLeft, setTooltipLeft] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [liveDuration, setLiveDuration] = useState(0);
+  const [liveSessionDuration, setLiveSessionDuration] = useState(0);
+  const [isLiveActive, setIsLiveActive] = useState(false);
+
+  // Effect chạy ngầm để lấy thời lượng thực tế của HLS khi đang ở chế độ Live
+  useEffect(() => {
+    if (hlsUrl && !useHls) {
+      const hls = new Hls();
+      const video = document.createElement('video');
+      video.muted = true;
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      
+      hls.on(Hls.Events.LEVEL_LOADED, (event, data) => {
+        if (data.details && (data.details as any).totalDuration) {
+          setLiveDuration((data.details as any).totalDuration);
+        }
+      });
+      
+      return () => {
+        hls.destroy();
+      };
+    }
+  }, [hlsUrl, useHls]);
 
   // --- FETCH DATA ---
   useEffect(() => {
@@ -326,7 +361,31 @@ export default function CommunityRoomPage({
   );
   const isAdmin = user?.role === 'admin';
   const [isEndRoomModalOpen, setIsEndRoomModalOpen] = useState(false);
+  const [isHostEndModalOpen, setIsHostEndModalOpen] = useState(false);
   const [liveKitToken, setLiveKitToken] = useState<string>('');
+  const [streamMode, setStreamMode] = useState<StreamMode>('GAMING');
+
+  // Bộ đếm thời gian tự tăng từ lúc bắt đầu Share màn hình (Live)
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (isLiveActive) {
+      interval = setInterval(() => {
+        setLiveSessionDuration((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isLiveActive]);
+
+  // Reset thời gian về 0 khi bắt đầu phiên live mới
+  const prevIsLiveActive = useRef(false);
+  useEffect(() => {
+    if (isLiveActive && !prevIsLiveActive.current) {
+      setLiveSessionDuration(0);
+    }
+    prevIsLiveActive.current = isLiveActive;
+  }, [isLiveActive]);
 
   // Sub-group state
   const [subGroupId, setSubGroupId] = useState<string>('');
@@ -426,12 +485,26 @@ export default function CommunityRoomPage({
     }
   );
 
+  // Tự động cuộn xuống dưới khi có tin nhắn mới
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
   const viewers = useMemo(() => {
     if (!socketMembers) return [];
     return socketMembers.filter((m) => m.username !== room?.host?.username);
   }, [socketMembers, room?.host?.username]);
 
   const [isHydrated, setIsHydrated] = useState(false);
+  const [hostQuality, setHostQuality] = useState<number>(3); // Mặc định là 3 (Excellent)
+
+  useEffect(() => {
+    const handleQuality = (e: any) => setHostQuality(e.detail.quality);
+    window.addEventListener('host-network-quality', handleQuality);
+    return () => window.removeEventListener('host-network-quality', handleQuality);
+  }, []);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -541,7 +614,7 @@ export default function CommunityRoomPage({
     try {
       socket?.emit('endRoom', { roomId: room.id });
       await deleteRoom(room.id);
-      setIsEndRoomModalOpen(false);
+      setIsHostEndModalOpen(false);
       router.push('/rooms');
       toast.success('Đã kết thúc phòng thành công');
     } catch (err) {
@@ -580,6 +653,8 @@ export default function CommunityRoomPage({
 
   const spawnEmoji = (emoji: string) => {
     sendEmoji(emoji);
+    // Phát event cho LiveKitControls/GlobalReactions gửi qua LiveKit
+    window.dispatchEvent(new CustomEvent('trigger-reaction', { detail: { emoji } }));
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -607,11 +682,12 @@ export default function CommunityRoomPage({
       const provider = process.env.NEXT_PUBLIC_GIF_PROVIDER || 'tenor';
       let endpoint =
         provider === 'tenor'
-          ? `https://tenor.googleapis.com/v2/${query ? 'search?q=' + encodeURIComponent(query) : 'featured?'}key=${apiKey}&limit=20`
-          : `https://api.giphy.com/v1/gifs/${query ? 'search?q=' + encodeURIComponent(query) : 'trending?'}api_key=${apiKey}&limit=20&rating=g`;
+          ? `https://tenor.googleapis.com/v2/${query ? 'search?q=' + encodeURIComponent(query) + '&' : 'featured?'}key=${apiKey}&limit=20`
+          : `https://api.giphy.com/v1/gifs/${query ? 'search?q=' + encodeURIComponent(query) + '&' : 'trending?'}api_key=${apiKey}&limit=20&rating=g`;
 
       const res = await fetch(endpoint);
       const data = await res.json();
+      console.log('[fetchGifs] Response data:', data);
       const formattedGifs =
         provider === 'tenor'
           ? (data.results || []).map((g: any) => ({
@@ -732,7 +808,7 @@ export default function CommunityRoomPage({
   };
 
   return (
-    <main className="scrollbar-hide flex h-screen w-screen flex-col overflow-auto bg-[#0A0A0B] font-sans text-slate-100">
+    <main className="scrollbar-hide flex h-screen w-screen flex-col overflow-hidden bg-[#0A0A0B] font-sans text-slate-100">
       {/* HEADER */}
       <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-white/5 bg-white/5 px-6">
         <Link href="/" className="flex items-center gap-4">
@@ -784,7 +860,7 @@ export default function CommunityRoomPage({
               <button
                 onClick={() =>
                   isHost
-                    ? setIsEndRoomModalOpen(true)
+                    ? setIsHostEndModalOpen(true)
                     : setIsLeaveModalOpen(true)
                 }
                 className="flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 text-xs font-bold text-red-500 hover:bg-red-500/30"
@@ -813,10 +889,12 @@ export default function CommunityRoomPage({
         onDisconnect={() => setLiveKitToken('')}
         video={isHost}
         audio={isHost}
+        audioMuted={false}
+        streamMode={streamMode}
       >
-        <div className="flex flex-1 gap-4 overflow-hidden p-4">
+        <div className="flex flex-col lg:flex-row flex-1 gap-4 overflow-y-auto lg:overflow-hidden p-0 lg:p-4">
           {/* LEFT SIDEBAR */}
-          <div className="flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden">
+          <div className="hidden lg:flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden order-2 lg:order-1">
             <div className="glass relative flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
               <div
                 className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 hover:bg-white/5"
@@ -1071,6 +1149,36 @@ export default function CommunityRoomPage({
                       exit={{ height: 0, opacity: 0 }}
                       className="flex flex-col gap-3 p-4"
                     >
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">
+                          Chế độ livestream
+                        </span>
+                        <div className="flex flex-col gap-1.5">
+                          {[
+                            { id: 'GAMING', label: 'GAMING (60 FPS)', icon: <MonitorPlay size={14} />, desc: 'Chuyển động mượt' },
+                            { id: 'CINEMA', label: 'CINEMA (HQ)', icon: <Film size={14} />, desc: 'Độ nét cao 1080p' },
+                            { id: 'SHARING', label: 'SHARING (TEXT)', icon: <FileText size={14} />, desc: 'Ưu tiên văn bản' }
+                          ].map((mode) => (
+                            <button
+                              key={mode.id}
+                              onClick={() => setStreamMode(mode.id as any)}
+                              className={`flex items-center gap-3 rounded-xl border p-2.5 text-left transition-all ${
+                                streamMode === mode.id 
+                                  ? 'border-[#C800DF] bg-[#C800DF]/10 text-white shadow-[0_0_15px_rgba(200,0,223,0.15)]' 
+                                  : 'border-white/5 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80'
+                              }`}
+                            >
+                              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${streamMode === mode.id ? 'bg-[#C800DF]/20 text-[#C800DF]' : 'bg-white/5'}`}>
+                                {mode.icon}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[11px] font-bold">{mode.label}</span>
+                                <span className="text-[9px] opacity-50">{mode.desc}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="flex flex-col gap-1.5">
                         <span className="text-[10px] font-black tracking-widest text-white/30 uppercase">
                           Chế độ phòng
@@ -1097,12 +1205,14 @@ export default function CommunityRoomPage({
           </div>
 
           {/* CENTER COLUMN */}
-          <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-            <div className="group relative flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl">
+          <div className="flex flex-1 flex-col gap-4 overflow-hidden order-1 lg:order-2 lg:h-[calc(100vh-88px)]">
+            <div className="group relative w-full aspect-video lg:aspect-auto lg:flex-1 overflow-hidden border border-white/10 bg-black shadow-2xl">
               {liveKitToken && (
                 <>
+                  <HLSReceiver onHlsUrl={setHlsUrl} />
+                  <ScreenShareTracker onStateChange={setIsLiveActive} />
                   <LiveKitScreenView />
-                  <ScreenShareTracker onStateChange={() => {}} />
+
                 </>
               )}
 
@@ -1126,10 +1236,18 @@ export default function CommunityRoomPage({
               )}
 
               <div className="pointer-events-none absolute top-4 left-4 z-20 flex items-center gap-2 rounded-full bg-black/60 px-3 py-1.5 backdrop-blur-md">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
-                </span>
+                {/* Host Network Indicator instead of Red Dot */}
+                <div className="flex items-end gap-0.5 bg-black/40 p-0.5 rounded-sm">
+                  <div className={`w-0.5 h-1 ${
+                    hostQuality === 0 ? 'bg-red-500' : hostQuality === 1 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`} />
+                  <div className={`w-0.5 h-1.5 ${
+                    hostQuality === 0 ? 'bg-white/20' : hostQuality === 1 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`} />
+                  <div className={`w-0.5 h-2 ${
+                    hostQuality === 0 || hostQuality === 1 ? 'bg-white/20' : 'bg-green-500'
+                  }`} />
+                </div>
                 <span className="text-xs font-bold text-white">Live</span>
                 <Users size={12} className="text-white/60" />
                 <span className="text-xs font-bold text-white">
@@ -1187,8 +1305,8 @@ export default function CommunityRoomPage({
           </div>
 
           {/* RIGHT COLUMN */}
-          <div className="glass relative flex w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
-            <div className="relative aspect-video w-full overflow-hidden border-b border-white/5 bg-black/40">
+          <div className="glass relative flex w-full h-[400px] lg:h-[calc(100vh-88px)] lg:w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5 order-3 lg:order-3">
+            <div className="relative aspect-video w-[160px] lg:w-full lg:max-w-none mx-auto overflow-hidden border-b border-white/5 bg-black/40 rounded-xl mt-2 lg:rounded-none lg:mt-0">
               {liveKitToken ? (
                 <LiveKitCameraView />
               ) : (
@@ -1203,7 +1321,7 @@ export default function CommunityRoomPage({
                 </span>
               </div>
               {liveKitToken && (
-                <LiveKitControls isHost={isHost} mode="community" />
+                <LiveKitControls isHost={isHost} mode="community" roomName={params.slug} />
               )}
             </div>
 
@@ -1432,11 +1550,11 @@ export default function CommunityRoomPage({
                         />
                       </div>
                     </div>
-                    <div className="scrollbar-hide grid grid-cols-2 gap-1 overflow-y-auto p-1">
+                    <div className="scrollbar-hide grid grid-cols-2 gap-3 overflow-y-auto p-3">
                       {gifs.map((gif) => (
                         <div
                           key={gif.id}
-                          className="group relative aspect-square cursor-pointer overflow-hidden rounded-lg"
+                          className="group relative h-[100px] cursor-pointer overflow-hidden rounded-lg bg-white/5"
                           onClick={() => {
                             sendMessage(gif.images.original.url);
                             setIsGifPickerOpen(false);
@@ -1445,7 +1563,7 @@ export default function CommunityRoomPage({
                           <img
                             src={gif.images.fixed_height_small.url}
                             alt="gif"
-                            className="h-full w-full object-cover transition-transform group-hover:scale-110"
+                            className="h-full w-full object-contain transition-transform group-hover:scale-110"
                           />
                         </div>
                       ))}
@@ -1823,8 +1941,8 @@ export default function CommunityRoomPage({
       />
 
       <ConfirmationModal
-        isOpen={isEndRoomModalOpen}
-        onClose={() => setIsEndRoomModalOpen(false)}
+        isOpen={isHostEndModalOpen}
+        onClose={() => setIsHostEndModalOpen(false)}
         onConfirm={handleEndRoom}
         title="Kết thúc phòng"
         message="Bạn có chắc chắn muốn kết thúc phòng? Tất cả người xem sẽ bị đưa ra ngoài và phòng sẽ không còn hoạt động."

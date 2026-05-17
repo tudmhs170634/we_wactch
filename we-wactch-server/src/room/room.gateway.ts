@@ -169,10 +169,18 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
                     this.server.to(roomId).emit('roomEnded');
                     
                     // Deactivate trong DB
-                    await this.prisma.room.update({
-                        where: { id: roomId },
-                        data: { isActive: false }
-                    });
+                    try {
+                        await this.prisma.room.update({
+                            where: { id: roomId },
+                            data: { isActive: false }
+                        });
+                    } catch (err: any) {
+                        if (err?.code === 'P2025') {
+                            this.logger.warn(`Room ${roomId} was already deleted before disconnect grace period resolved. Skipping deactivation.`);
+                        } else {
+                            throw err;
+                        }
+                    }
 
                     // Clear cache
                     await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${room.slug}`);
@@ -204,11 +212,21 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
                     }
 
                     if (newHostId) {
-                        const updatedRoom = await this.prisma.room.update({
-                            where: { id: roomId },
-                            data: { hostId: newHostId },
-                            include: { host: true }
-                        });
+                        let updatedRoom;
+                        try {
+                            updatedRoom = await this.prisma.room.update({
+                                where: { id: roomId },
+                                data: { hostId: newHostId },
+                                include: { host: true }
+                            });
+                        } catch (err: any) {
+                            if (err?.code === 'P2025') {
+                                this.logger.warn(`Room ${roomId} was already deleted before host transfer. Skipping.`);
+                                return;
+                            } else {
+                                throw err;
+                            }
+                        }
 
                         // Clear cache for this room
                         await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${updatedRoom.slug}`);

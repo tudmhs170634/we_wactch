@@ -1,7 +1,8 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards, Param, Res, Req } from '@nestjs/common';
 import { LiveKitService } from './livekit.service';
 import { JwtAuthGuard } from '../auth/guard/jwt-auth.guard';
 import { GetUser } from '../auth/decorator/get-user.decorator';
+import type { Response } from 'express';
 
 @Controller('livekit')
 export class LiveKitController {
@@ -31,4 +32,8 @@ export class LiveKitController {
     const token = await this.livekitService.generateToken(subRoomName, identity);
     return { token, subRoomName };
   }
+
+
 }
+
+
