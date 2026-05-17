@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  PutBucketPolicyCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
@@ -26,6 +27,34 @@ export class S3Service {
       },
       forcePathStyle: false,
     });
+    this.setPublicBucketPolicy();
+  }
+
+  async setPublicBucketPolicy(): Promise<void> {
+    const policy = {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Sid: 'PublicReadGetObject',
+          Effect: 'Allow',
+          Principal: '*',
+          Action: 's3:GetObject',
+          Resource: `arn:aws:s3:::${this.bucket}/livestream/*`,
+        },
+      ],
+    };
+
+    const command = new PutBucketPolicyCommand({
+      Bucket: this.bucket,
+      Policy: JSON.stringify(policy),
+    });
+
+    try {
+      await this.client.send(command);
+      console.log(`Successfully set public bucket policy for livestream/ folder in ${this.bucket}`);
+    } catch (error) {
+      console.error('Failed to set bucket policy:', error);
+    }
   }
 
   async getPresignedUploadUrl(

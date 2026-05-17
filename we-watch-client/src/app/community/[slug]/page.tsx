@@ -23,6 +23,7 @@ import {
   LiveKitScreenView,
   LiveKitControls,
   MiniRoomView,
+  HLSReceiver,
   SubGroupRoom,
   SubGroupView,
   SubGroupMicToggle,
@@ -73,6 +74,7 @@ import {
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
+import Hls from 'hls.js';
 import { ConfirmationModal } from '@/src/components/rooms/ConfirmationModal';
 
 // --- HELPER COMPONENTS ---
@@ -255,6 +257,36 @@ export default function CommunityRoomPage({
   const [syncDone, setSyncDone] = useState(false);
   const [loading, setLoading] = useState(true);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [hlsUrl, setHlsUrl] = useState<string | null>(null);
+  const [useHls, setUseHls] = useState(false);
+  const [initialSeek, setInitialSeek] = useState<number | undefined>(undefined);
+  const [tooltipTime, setTooltipTime] = useState('');
+  const [tooltipLeft, setTooltipLeft] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [liveDuration, setLiveDuration] = useState(0);
+  const [liveSessionDuration, setLiveSessionDuration] = useState(0);
+  const [isLiveActive, setIsLiveActive] = useState(false);
+
+  // Effect chạy ngầm để lấy thời lượng thực tế của HLS khi đang ở chế độ Live
+  useEffect(() => {
+    if (hlsUrl && !useHls) {
+      const hls = new Hls();
+      const video = document.createElement('video');
+      video.muted = true;
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      
+      hls.on(Hls.Events.LEVEL_LOADED, (event, data) => {
+        if (data.details && (data.details as any).totalDuration) {
+          setLiveDuration((data.details as any).totalDuration);
+        }
+      });
+      
+      return () => {
+        hls.destroy();
+      };
+    }
+  }, [hlsUrl, useHls]);
 
   // --- FETCH DATA ---
   useEffect(() => {
@@ -332,6 +364,28 @@ export default function CommunityRoomPage({
   const [isHostEndModalOpen, setIsHostEndModalOpen] = useState(false);
   const [liveKitToken, setLiveKitToken] = useState<string>('');
   const [streamMode, setStreamMode] = useState<StreamMode>('GAMING');
+
+  // Bộ đếm thời gian tự tăng từ lúc bắt đầu Share màn hình (Live)
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (isLiveActive) {
+      interval = setInterval(() => {
+        setLiveSessionDuration((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isLiveActive]);
+
+  // Reset thời gian về 0 khi bắt đầu phiên live mới
+  const prevIsLiveActive = useRef(false);
+  useEffect(() => {
+    if (isLiveActive && !prevIsLiveActive.current) {
+      setLiveSessionDuration(0);
+    }
+    prevIsLiveActive.current = isLiveActive;
+  }, [isLiveActive]);
 
   // Sub-group state
   const [subGroupId, setSubGroupId] = useState<string>('');
@@ -430,6 +484,13 @@ export default function CommunityRoomPage({
       }
     }
   );
+
+  // Tự động cuộn xuống dưới khi có tin nhắn mới
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   const viewers = useMemo(() => {
     if (!socketMembers) return [];
@@ -612,11 +673,12 @@ export default function CommunityRoomPage({
       const provider = process.env.NEXT_PUBLIC_GIF_PROVIDER || 'tenor';
       let endpoint =
         provider === 'tenor'
-          ? `https://tenor.googleapis.com/v2/${query ? 'search?q=' + encodeURIComponent(query) : 'featured?'}key=${apiKey}&limit=20`
-          : `https://api.giphy.com/v1/gifs/${query ? 'search?q=' + encodeURIComponent(query) : 'trending?'}api_key=${apiKey}&limit=20&rating=g`;
+          ? `https://tenor.googleapis.com/v2/${query ? 'search?q=' + encodeURIComponent(query) + '&' : 'featured?'}key=${apiKey}&limit=20`
+          : `https://api.giphy.com/v1/gifs/${query ? 'search?q=' + encodeURIComponent(query) + '&' : 'trending?'}api_key=${apiKey}&limit=20&rating=g`;
 
       const res = await fetch(endpoint);
       const data = await res.json();
+      console.log('[fetchGifs] Response data:', data);
       const formattedGifs =
         provider === 'tenor'
           ? (data.results || []).map((g: any) => ({
@@ -737,7 +799,7 @@ export default function CommunityRoomPage({
   };
 
   return (
-    <main className="scrollbar-hide flex h-screen w-screen flex-col overflow-auto bg-[#0A0A0B] font-sans text-slate-100">
+    <main className="scrollbar-hide flex h-screen w-screen flex-col overflow-hidden bg-[#0A0A0B] font-sans text-slate-100">
       {/* HEADER */}
       <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-white/5 bg-white/5 px-6">
         <Link href="/" className="flex items-center gap-4">
@@ -818,11 +880,12 @@ export default function CommunityRoomPage({
         onDisconnect={() => setLiveKitToken('')}
         video={isHost}
         audio={isHost}
+        audioMuted={useHls}
         streamMode={streamMode}
       >
-        <div className="flex flex-1 gap-4 overflow-hidden p-4">
+        <div className="flex flex-col lg:flex-row flex-1 gap-4 overflow-y-auto lg:overflow-hidden p-0 lg:p-4">
           {/* LEFT SIDEBAR */}
-          <div className="flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden">
+          <div className="hidden lg:flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden order-2 lg:order-1">
             <div className="glass relative flex flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
               <div
                 className="flex cursor-pointer items-center justify-between border-b border-white/5 p-4 hover:bg-white/5"
@@ -1133,12 +1196,123 @@ export default function CommunityRoomPage({
           </div>
 
           {/* CENTER COLUMN */}
-          <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-            <div className="group relative flex-1 overflow-hidden rounded-[24px] border border-white/10 bg-black shadow-2xl">
+          <div className="flex flex-1 flex-col gap-4 overflow-hidden order-1 lg:order-2 lg:h-[calc(100vh-88px)]">
+            <div className="group relative w-full aspect-video lg:aspect-auto lg:flex-1 overflow-hidden border border-white/10 bg-black shadow-2xl">
               {liveKitToken && (
                 <>
-                  <LiveKitScreenView />
-                  <ScreenShareTracker onStateChange={() => {}} />
+                  <HLSReceiver onHlsUrl={setHlsUrl} />
+                  <ScreenShareTracker onStateChange={setIsLiveActive} />
+                  {!isHost && hlsUrl && useHls ? (
+                    <>
+                      <div className="absolute inset-0 z-0">
+                        <VideoPlayer
+                          src={hlsUrl}
+                          poster={room?.video?.thumbnailUrl}
+                          liveSessionDuration={liveSessionDuration}
+                          onGoLive={() => {
+                            setUseHls(false);
+                            setInitialSeek(undefined);
+                          }}
+                          initialSeek={initialSeek}
+                          onAction={() => {}}
+                          lastAction={null}
+                          initialState={null}
+                          onOffsetChange={() => {}}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                       <LiveKitScreenView />
+
+                      
+                      {/* Giao diện điều khiển giả lập HLS (YouTube style) */}
+                      <div className="absolute inset-0 z-10 flex flex-col justify-end bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        {/* Buttons */}
+                        <div className="flex items-center gap-3 px-4 pb-2">
+                          <button className="text-white transition-colors hover:text-pink-400">
+                            <Pause className="h-6 w-6" />
+                          </button>
+                          <button className="text-white transition-colors hover:text-pink-400">
+                            <Volume2 className="h-5 w-5" />
+                          </button>
+                          
+                          {/* Live Badge */}
+                          <div className="flex items-center gap-1.5 rounded-md px-2 py-1">
+                            <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                            <span className="text-xs font-bold text-white">LIVE</span>
+                          </div>
+
+                          <span className="flex-1 text-xs font-bold text-white/60">
+                            {/* Trống vì đang Live */}
+                          </span>
+
+                          <button className="text-white transition-colors hover:text-pink-400">
+                            <Settings className="h-5 w-5" />
+                          </button>
+                          <button className="text-white transition-colors hover:text-pink-400">
+                            <Maximize className="h-5 w-5" />
+                          </button>
+                        </div>
+
+                        {/* Progress bar (YouTube style at the very bottom) */}
+                        {!isHost && (
+                          <div
+                            onClick={(e) => {
+                              if (hlsUrl) {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const pos = (e.clientX - rect.left) / rect.width;
+                                setInitialSeek(pos);
+                                setUseHls(true);
+                              } else {
+                                toast.error('Luồng Tua (HLS) chưa sẵn sàng, vui lòng đợi vài giây!');
+                              }
+                            }}
+                            onMouseMove={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const pos = (e.clientX - rect.left) / rect.width;
+                              
+                              const formatTime = (secs: number) => {
+                                const h = Math.floor(secs / 3600);
+                                const m = Math.floor((secs % 3600) / 60);
+                                const s = Math.floor(secs % 60);
+                                return h > 0 
+                                  ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+                                  : `${m}:${s.toString().padStart(2, '0')}`;
+                              };
+
+                              // Sử dụng bộ đếm thời gian tự tăng thay vì thời gian từ server
+                              setTooltipTime(formatTime(pos * liveSessionDuration));
+                              setTooltipLeft(e.clientX - rect.left);
+                              setShowTooltip(true);
+                            }}
+                            onMouseLeave={() => setShowTooltip(false)}
+                            className={`group/bar relative h-1.5 w-full transition-all ${hlsUrl ? 'cursor-pointer bg-white/20' : 'cursor-not-allowed bg-white/5'}`}
+                            title={hlsUrl ? "Bấm vào đây để Tua lại" : "Đang khởi tạo luồng Tua (HLS)..."}
+                          >
+                            {/* Chấm tròn đỏ (Thumb) khi hover */}
+                            <div className="absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1/2 scale-0 rounded-full bg-red-500 transition-transform group-hover/bar:scale-100" style={{ right: '0%' }} />
+                            
+                            {/* Tooltip hiển thị thời gian */}
+                            {showTooltip && (
+                              <div 
+                                className="absolute bottom-4 z-50 -translate-x-1/2 rounded bg-black/80 px-2 py-1 text-xs font-bold text-white backdrop-blur-sm"
+                                style={{ left: `${tooltipLeft}px` }}
+                              >
+                                {tooltipTime}
+                              </div>
+                            )}
+
+                            {/* Thanh màu đỏ/xám lấp đầy */}
+                            <div
+                              className={`h-full ${hlsUrl ? 'bg-red-500' : 'bg-gray-500'}`}
+                              style={{ width: '100%' }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
@@ -1223,8 +1397,8 @@ export default function CommunityRoomPage({
           </div>
 
           {/* RIGHT COLUMN */}
-          <div className="glass relative flex w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5">
-            <div className="relative aspect-video w-full overflow-hidden border-b border-white/5 bg-black/40">
+          <div className="glass relative flex w-full h-[400px] lg:h-[calc(100vh-88px)] lg:w-[340px] flex-shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/5 bg-white/5 order-3 lg:order-3">
+            <div className="relative aspect-video w-[160px] lg:w-full lg:max-w-none mx-auto overflow-hidden border-b border-white/5 bg-black/40 rounded-xl mt-2 lg:rounded-none lg:mt-0">
               {liveKitToken ? (
                 <LiveKitCameraView />
               ) : (
@@ -1239,7 +1413,7 @@ export default function CommunityRoomPage({
                 </span>
               </div>
               {liveKitToken && (
-                <LiveKitControls isHost={isHost} mode="community" />
+                <LiveKitControls isHost={isHost} mode="community" roomName={params.slug} />
               )}
             </div>
 
@@ -1468,11 +1642,11 @@ export default function CommunityRoomPage({
                         />
                       </div>
                     </div>
-                    <div className="scrollbar-hide grid grid-cols-2 gap-1 overflow-y-auto p-1">
+                    <div className="scrollbar-hide grid grid-cols-2 gap-3 overflow-y-auto p-3">
                       {gifs.map((gif) => (
                         <div
                           key={gif.id}
-                          className="group relative aspect-square cursor-pointer overflow-hidden rounded-lg"
+                          className="group relative h-[100px] cursor-pointer overflow-hidden rounded-lg bg-white/5"
                           onClick={() => {
                             sendMessage(gif.images.original.url);
                             setIsGifPickerOpen(false);
@@ -1481,7 +1655,7 @@ export default function CommunityRoomPage({
                           <img
                             src={gif.images.fixed_height_small.url}
                             alt="gif"
-                            className="h-full w-full object-cover transition-transform group-hover:scale-110"
+                            className="h-full w-full object-contain transition-transform group-hover:scale-110"
                           />
                         </div>
                       ))}

@@ -1,15 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useAuthStore } from '@/src/store/useAuthStore';
 import {
   LiveKitRoom as LKRoom,
   RoomAudioRenderer,
   useTracks,
   ParticipantTile,
+  VideoTrack,
   TrackReferenceOrPlaceholder,
+  TrackReference,
   useLocalParticipant,
   useParticipants,
   useIsSpeaking,
+  useRoomContext,
 } from '@livekit/components-react';
 import { Track, VideoQuality, VideoPresets, RemoteTrackPublication, VideoPreset, LocalVideoTrack } from 'livekit-client';
 import { 
@@ -336,8 +340,9 @@ export function LiveKitProvider({
   children,
   video = false,
   audio = false,
+  audioMuted = false,
   streamMode,
-}: LiveKitContextProps & { video?: boolean; audio?: boolean }) {
+}: LiveKitContextProps & { video?: boolean; audio?: boolean; audioMuted?: boolean }) {
   const serverUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
   if (!token || !serverUrl) return <>{children}</>;
@@ -378,7 +383,7 @@ export function LiveKitProvider({
     >
       {children}
       {streamMode && <StreamSettingsUpdater mode={streamMode} />}
-      <RoomAudioRenderer />
+      {!audioMuted && <RoomAudioRenderer />}
     </LKRoom>
   );
 }
@@ -555,8 +560,8 @@ export function LiveKitScreenView() {
       onDoubleClick={toggleFullscreen}
       className="group/live absolute inset-0 z-10 bg-black cursor-pointer fullscreen:!fixed fullscreen:!inset-0 fullscreen:!z-[9999] fullscreen:!w-screen fullscreen:!h-screen fullscreen:!rounded-none"
     >
-      <ParticipantTile
-        trackRef={tracks[0]}
+      <VideoTrack
+        trackRef={tracks[0] as TrackReference}
         style={{ width: '100%', height: '100%' }}
       />
       
@@ -711,13 +716,14 @@ export function SubGroupMicToggle() {
   );
 }
 
-// ─── Media controls (host: mic + cam + screen; viewer: mic only, restricted in community) ──
 export function LiveKitControls({
   isHost,
   mode = 'private',
+  roomName,
 }: {
   isHost: boolean;
   mode?: 'private' | 'community';
+  roomName: string;
 }) {
   const {
     isMicrophoneEnabled,
@@ -774,12 +780,38 @@ export function LiveKitControls({
                   }
                 });
 
+                // Bật Egress nếu là phòng community (Gọi ngay không cần chờ track)
+                if (enabled && mode === 'community') {
+                  console.log('[Egress] Đang gọi API start-egress cho phòng:', roomName);
+                  try {
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/livekit/start-egress`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${useAuthStore.getState().token}`,
+                      },
+                      body: JSON.stringify({ roomName }),
+                    });
+                    const data = await res.json();
+                    console.log('[Egress] Response:', data);
+                    
+                    // Phát tán link HLS cho người xem qua Data Channel
+                    if (data.hlsUrl) {
+                      const encoder = new TextEncoder();
+                      const payload = JSON.stringify({ type: 'hls_url', url: data.hlsUrl });
+                      await localParticipant.publishData(encoder.encode(payload), {
+                        reliable: true,
+                      });
+                      console.log('[Egress] Đã phát tán link HLS');
+                    }
+                  } catch (e) {
+                    console.error('[Egress] Lỗi khi gọi API start-egress:', e);
+                  }
+                }
+
                 if (enabled && pub && (pub as any).track) {
                   const settings = (pub as any).track.mediaStreamTrack.getSettings();
                   console.log('[LiveKit] Thông số thực tế trình duyệt cấp:', settings);
-                  if (settings.frameRate && settings.frameRate < 60) {
-                    console.warn(`[LiveKit] Trình duyệt chỉ cấp ${settings.frameRate} FPS. Hãy thử chia sẻ 'Toàn màn hình' thay vì 'Tab'.`);
-                  }
                 }
               } catch (err) {
                 console.error('[LiveKit] Lỗi khi bật Screen Share:', err);
@@ -799,3 +831,40 @@ export function LiveKitControls({
     </div>
   );
 }
+
+// ─── HLS Receiver (Listens for room metadata changes to get HLS URL) ───────
+import { useEffect } from 'react';
+
+export function HLSReceiver({ onHlsUrl }: { onHlsUrl: (url: string) => void }) {
+  const room = useRoomContext();
+
+  useEffect(() => {
+    if (!room) return;
+    
+    const handleMetadataChange = (metadata: string | undefined) => {
+      console.log('[HLSReceiver] Metadata nhận được:', metadata);
+      if (metadata) {
+        try {
+          const parsed = JSON.parse(metadata);
+          if (parsed.hls_url) {
+            console.log('[HLSReceiver] Đã tìm thấy HLS URL:', parsed.hls_url);
+            onHlsUrl(parsed.hls_url);
+          }
+        } catch (e) {
+          console.error('[HLSReceiver] Lỗi parse JSON metadata:', e);
+        }
+      }
+    };
+
+    // Check initial metadata
+    handleMetadataChange(room.metadata);
+    
+    room.on('roomMetadataChanged', handleMetadataChange);
+    return () => {
+      room.off('roomMetadataChanged', handleMetadataChange);
+    };
+  }, [room, onHlsUrl]);
+
+  return null;
+}
+

@@ -36,6 +36,11 @@ interface VideoPlayerProps {
   } | null;
   onOffsetChange?: (offset: number) => void;
   serverTimeOffset?: number;
+  hideControls?: boolean;
+  onProgressUpdate?: (currentTime: number, duration: number) => void;
+  onGoLive?: () => void;
+  initialSeek?: number;
+  liveSessionDuration?: number;
 }
 
 export default function VideoPlayer({
@@ -46,6 +51,11 @@ export default function VideoPlayer({
   initialState,
   onOffsetChange,
   serverTimeOffset = 0,
+  hideControls = false,
+  onProgressUpdate,
+  onGoLive,
+  initialSeek,
+  liveSessionDuration,
 }: VideoPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -53,13 +63,19 @@ export default function VideoPlayer({
   const [muted, setMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [currentWatchTime, setCurrentWatchTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
   const [currentQuality, setCurrentQuality] = useState(-1); // -1 = Auto
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [currentAutoLabel, setCurrentAutoLabel] = useState(''); // Label hiển thị khi Auto
+  const [tooltipTime, setTooltipTime] = useState('');
+  const [tooltipLeft, setTooltipLeft] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const seekInProgress = useRef(false);
 
   // Flag để tránh vòng lặp: khi nhận lệnh từ socket thì không emit ngược lại
   const ignoreNextEvent = useRef(false);
@@ -80,6 +96,7 @@ export default function VideoPlayer({
     const isHLS = src.endsWith('.m3u8') || src.includes('.m3u8?');
 
     if (isHLS && Hls.isSupported()) {
+      console.log('[VideoPlayer] Đang tải nguồn HLS:', src);
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
@@ -280,10 +297,26 @@ export default function VideoPlayer({
     if (!v) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
-    const newTime = pct * v.duration;
+    
+    setIsDragging(true);
+    setProgress(pct);
+    seekInProgress.current = true;
 
-    v.currentTime = newTime;
-    onAction?.('seek', newTime);
+    if (liveSessionDuration) {
+      // Tính thời gian thực tế muốn tua tới
+      const targetLiveTime = pct * liveSessionDuration;
+      setCurrentWatchTime(targetLiveTime);
+      // Ánh xạ sang thời gian của thẻ video HLS
+      const targetHLSTime = v.duration - (liveSessionDuration - targetLiveTime);
+      v.currentTime = Math.max(0, targetHLSTime);
+    } else {
+      v.currentTime = pct * v.duration;
+      setCurrentWatchTime(v.currentTime);
+    }
+
+    v.play().catch(() => {});
+    setPlaying(true);
+    onAction?.('seek', v.currentTime);
   };
 
   const fullscreen = () => ref.current?.requestFullscreen();
@@ -375,8 +408,7 @@ export default function VideoPlayer({
 
   return (
     <div
-      className="group relative w-full overflow-hidden rounded-[24px] bg-black"
-      style={{ aspectRatio: '16/9' }}
+      className="group relative h-full w-full overflow-hidden bg-black"
       onMouseMove={handleMouseMove}
       onMouseLeave={() => playing && setShowControls(false)}
     >
@@ -386,13 +418,36 @@ export default function VideoPlayer({
         className="h-full w-full object-contain"
         onTimeUpdate={() => {
           const v = ref.current;
-          if (v) setProgress(v.currentTime / v.duration);
+          if (v && !v.seeking && !isDragging) {
+            // Không cập nhật currentWatchTime ở đây để thanh đỏ đứng im tại mốc thời gian đã click!
+            onProgressUpdate?.(v.currentTime, v.duration);
+          }
         }}
         onLoadedMetadata={() => {
-          if (ref.current) setDuration(ref.current.duration);
+          const v = ref.current;
+          if (v) {
+            setDuration(v.duration);
+            if (initialSeek !== undefined) {
+              v.currentTime = initialSeek * v.duration;
+              setProgress(initialSeek);
+            }
+          }
         }}
         onWaiting={() => setLoading(true)}
         onCanPlay={() => setLoading(false)}
+        onSeeked={() => {
+          const v = ref.current;
+          if (v) {
+            v.play().catch(() => {});
+            setPlaying(true);
+          }
+        }}
+        onPlaying={() => {
+          if (seekInProgress.current) {
+            setIsDragging(false);
+            seekInProgress.current = false;
+          }
+        }}
         onPlay={handlePlay}
         onPause={handlePause}
         onClick={togglePlay}
@@ -407,132 +462,159 @@ export default function VideoPlayer({
       )}
 
       {/* Controls overlay */}
-      <div
-        className={`absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
-      >
-        {/* Progress bar */}
+      {!hideControls && (
         <div
-          className="mx-4 mb-3 h-1.5 cursor-pointer rounded-full bg-white/20"
-          onClick={seek}
+          className={`absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
         >
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all"
-            style={{ width: `${progress * 100}%` }}
-          />
-        </div>
+          {/* Buttons */}
+          <div className="flex items-center gap-3 px-4 pb-2">
+            <button
+              onClick={togglePlay}
+              className="text-white transition-colors hover:text-pink-400"
+            >
+              {playing ? (
+                <Pause className="h-6 w-6" />
+              ) : (
+                <Play className="h-6 w-6" />
+              )}
+            </button>
+            <button
+              onClick={toggleMute}
+              className="text-white transition-colors hover:text-pink-400"
+            >
+              {muted ? (
+                <VolumeX className="h-5 w-5" />
+              ) : (
+                <Volume2 className="h-5 w-5" />
+              )}
+            </button>
+            
+            {/* Live Badge (Trạng thái đang tua) */}
+            <button 
+              onClick={onGoLive}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 cursor-pointer hover:bg-white/10 transition-colors"
+              title="Bấm để quay lại Live"
+            >
+              <div className="h-2 w-2 rounded-full bg-gray-400" />
+              <span className="text-xs font-bold text-white/70">LIVE</span>
+            </button>
 
-        {/* Buttons */}
-        <div className="flex items-center gap-3 px-4 pb-4">
-          <button
-            onClick={togglePlay}
-            className="text-white transition-colors hover:text-pink-400"
-          >
-            {playing ? (
-              <Pause className="h-6 w-6" />
-            ) : (
-              <Play className="h-6 w-6" />
-            )}
-          </button>
-          <button
-            onClick={toggleMute}
-            className="text-white transition-colors hover:text-pink-400"
-          >
-            {muted ? (
-              <VolumeX className="h-5 w-5" />
-            ) : (
-              <Volume2 className="h-5 w-5" />
-            )}
-          </button>
-          <span className="flex-1 text-xs font-bold text-white/60">
-            {fmt(progress * duration)} / {fmt(duration)}
-          </span>
+            <span className="flex-1"></span>
 
-          {/* Quality Selector */}
-          {qualityLevels.length > 0 && (
-            <div className="relative">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowQualityMenu(!showQualityMenu);
-                }}
-                className="flex items-center gap-1 text-white transition-colors hover:text-pink-400"
-              >
-                <Settings className="h-5 w-5" />
-                <span className="text-[10px] font-bold">
-                  {currentQuality === -1
-                    ? 'Auto'
-                    : qualityLevels.find((q) => q.index === currentQuality)
-                        ?.label}
-                </span>
-              </button>
-
-              {/* Quality Dropdown */}
-              {showQualityMenu && (
-                <div
-                  className="absolute right-0 bottom-8 z-50 min-w-[140px] overflow-hidden rounded-xl border border-white/10 bg-[#1A1A1D]/95 py-1 shadow-2xl backdrop-blur-lg"
-                  onClick={(e) => e.stopPropagation()}
+            {/* Quality Selector */}
+            {qualityLevels.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowQualityMenu(!showQualityMenu);
+                  }}
+                  className="flex items-center gap-1 text-white transition-colors hover:text-pink-400"
                 >
-                  <div className="border-b border-white/10 px-3 py-1.5 text-[10px] font-bold tracking-widest text-white/30 uppercase">
-                    Chất lượng
-                  </div>
-                  {/* Auto option */}
-                  <button
-                    onClick={() => switchQuality(-1)}
-                    className={`flex w-full items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-white/10 ${
-                      currentQuality === -1
-                        ? 'font-bold text-pink-400'
-                        : 'text-white/80'
-                    }`}
+                  <Settings className="h-5 w-5" />
+                  <span className="text-[10px] font-bold">
+                    {currentQuality === -1
+                      ? 'Auto'
+                      : qualityLevels.find((q) => q.index === currentQuality)
+                          ?.label}
+                  </span>
+                </button>
+
+                {/* Quality Dropdown */}
+                {showQualityMenu && (
+                  <div
+                    className="absolute right-0 bottom-8 z-50 min-w-[140px] overflow-hidden rounded-xl border border-white/10 bg-[#1A1A1D]/95 py-1 shadow-2xl backdrop-blur-lg"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <span>Tự động</span>
-                    {currentQuality === -1 && currentAutoLabel && (
-                      <span className="text-[10px] text-white/40">
-                        {currentAutoLabel}
-                      </span>
-                    )}
-                  </button>
-                  {/* Individual levels */}
-                  {qualityLevels.map((level) => (
+                    <div className="border-b border-white/10 px-3 py-1.5 text-[10px] font-bold tracking-widest text-white/30 uppercase">
+                      Chất lượng
+                    </div>
+                    {/* Auto option */}
                     <button
-                      key={level.index}
-                      onClick={() => switchQuality(level.index)}
+                      onClick={() => switchQuality(-1)}
                       className={`flex w-full items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-white/10 ${
-                        currentQuality === level.index
+                        currentQuality === -1
                           ? 'font-bold text-pink-400'
                           : 'text-white/80'
                       }`}
                     >
-                      <span>{level.label}</span>
-                      <span className="text-[10px] text-white/30">
-                        {(level.bitrate / 1000000).toFixed(1)}Mbps
-                      </span>
+                      <span>Tự động</span>
+                      {currentQuality === -1 && currentAutoLabel && (
+                        <span className="text-[10px] text-white/40">
+                          {currentAutoLabel}
+                        </span>
+                      )}
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    {/* Individual levels */}
+                    {qualityLevels.map((level) => (
+                      <button
+                        key={level.index}
+                        onClick={() => switchQuality(level.index)}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-white/10 ${
+                          currentQuality === level.index
+                            ? 'font-bold text-pink-400'
+                            : 'text-white/80'
+                        }`}
+                      >
+                        <span>{level.label}</span>
+                        <span className="text-[10px] text-white/30">
+                          {(level.bitrate / 1000000).toFixed(1)}Mbps
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-          <button
-            onClick={fullscreen}
-            className="text-white transition-colors hover:text-pink-400"
+            <button
+              onClick={fullscreen}
+              className="text-white transition-colors hover:text-pink-400"
+            >
+              <Maximize className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div
+            className="group/bar relative h-1.5 w-full cursor-pointer bg-white/20"
+            onClick={seek}
+            onMouseMove={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const pos = (e.clientX - rect.left) / rect.width;
+              
+              const displayTime = (liveSessionDuration && duration > 0)
+                ? liveSessionDuration - (duration - pos * duration)
+                : (liveSessionDuration ? pos * liveSessionDuration : pos * duration);
+                
+              setTooltipTime(fmt(displayTime));
+              setTooltipLeft(e.clientX - rect.left);
+              setShowTooltip(true);
+            }}
+            onMouseLeave={() => setShowTooltip(false)}
           >
-            <Maximize className="h-5 w-5" />
-          </button>
+            <div
+              className="relative h-full bg-red-500"
+              style={{ width: `${(liveSessionDuration ? currentWatchTime / liveSessionDuration : progress) * 100}%` }}
+            >
+              {/* Chấm tròn đỏ (Thumb) khi hover */}
+              <div className="absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1/2 scale-0 rounded-full bg-red-500 transition-transform group-hover/bar:scale-100" />
+            </div>
+
+            {/* Tooltip hiển thị thời gian */}
+            {showTooltip && (
+              <div 
+                className="absolute bottom-4 z-50 -translate-x-1/2 rounded bg-black/80 px-2 py-1 text-xs font-bold text-white backdrop-blur-sm"
+                style={{ left: `${tooltipLeft}px` }}
+              >
+                {tooltipTime}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Center play button (idle state) */}
-      {!playing && !loading && (
-        <button
-          onClick={togglePlay}
-          className="absolute inset-0 flex items-center justify-center"
-        >
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm transition-transform hover:scale-110">
-            <Play className="h-7 w-7 translate-x-0.5 text-white" />
-          </div>
-        </button>
-      )}
+
     </div>
   );
 }
