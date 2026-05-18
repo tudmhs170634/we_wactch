@@ -71,7 +71,9 @@ import {
   Film,
   FileText,
 } from 'lucide-react';
-import EmojiPicker, { Theme } from 'emoji-picker-react';
+import { Theme } from 'emoji-picker-react';
+import dynamic from 'next/dynamic';
+const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import Hls from 'hls.js';
@@ -402,6 +404,7 @@ export default function CommunityRoomPage({
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const gifCache = useRef<Record<string, any[]>>({});
 
   // Click outside to close pickers
   useEffect(() => {
@@ -498,7 +501,8 @@ export default function CommunityRoomPage({
   }, [socketMembers, room?.host?.username]);
 
   const [isHydrated, setIsHydrated] = useState(false);
-  const [hostQuality, setHostQuality] = useState<number>(3); // Mặc định là 3 (Excellent)
+  const [welcomeUser, setWelcomeUser] = useState<string | null>(null);
+  const [hostQuality, setHostQuality] = useState<number | string>(3); // Mặc định là 3 (Excellent)
 
   useEffect(() => {
     const handleQuality = (e: any) => setHostQuality(e.detail.quality);
@@ -535,11 +539,21 @@ export default function CommunityRoomPage({
     }
   }, [room, user, currentHostId, setCurrentHostId]);
 
-  // Status message visibility
+  // Status message visibility & Welcome Banner
   useEffect(() => {
     const lastMsg = messages[messages.length - 1];
     if (lastMsg?.type === 'status') {
       setVisibleStatusIds((prev) => new Set(prev).add(lastMsg.id));
+      
+      // Hiệu ứng Welcome Banner
+      if (lastMsg.message.includes('đã tham gia phòng')) {
+        const username = lastMsg.message.replace(' đã tham gia phòng', '');
+        setWelcomeUser(username);
+        setTimeout(() => {
+          setWelcomeUser(null);
+        }, 3000); // Hiển thị trong 3 giây
+      }
+
       const timer = setTimeout(() => {
         setVisibleStatusIds((prev) => {
           const next = new Set(prev);
@@ -677,6 +691,12 @@ export default function CommunityRoomPage({
   };
 
   const fetchGifs = async (query = '') => {
+    // Kiểm tra cache trước
+    if (gifCache.current[query]) {
+      setGifs(gifCache.current[query]);
+      return;
+    }
+
     try {
       const apiKey = process.env.NEXT_PUBLIC_GIF_API_KEY || 'LIVDSRZULELA';
       const provider = process.env.NEXT_PUBLIC_GIF_PROVIDER || 'tenor';
@@ -704,6 +724,9 @@ export default function CommunityRoomPage({
                 original: { url: g.images.original.url },
               },
             }));
+      
+      // Lưu vào cache
+      gifCache.current[query] = formattedGifs;
       setGifs(formattedGifs);
     } catch (err) {
       console.error('Fetch GIFs error:', err);
@@ -1212,7 +1235,21 @@ export default function CommunityRoomPage({
                   <HLSReceiver onHlsUrl={setHlsUrl} />
                   <ScreenShareTracker onStateChange={setIsLiveActive} />
                   <LiveKitScreenView />
-
+                  {/* Welcome Banner */}
+                  <AnimatePresence>
+                    {welcomeUser && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -50, scale: 0.8 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -20, scale: 0.8 }}
+                        className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/80 backdrop-blur-md px-4 py-2 rounded-full border border-[#00E5FF]/30 shadow-[0_0_15px_rgba(0,229,255,0.2)] flex items-center gap-2"
+                      >
+                        <span className="text-xs font-bold text-white">
+                          🎉 Chào mừng <span className="text-[#00E5FF]">{welcomeUser}</span> đã tham gia phòng!
+                        </span>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </>
               )}
 
@@ -1239,13 +1276,13 @@ export default function CommunityRoomPage({
                 {/* Host Network Indicator instead of Red Dot */}
                 <div className="flex items-end gap-0.5 bg-black/40 p-0.5 rounded-sm">
                   <div className={`w-0.5 h-1 ${
-                    hostQuality === 0 ? 'bg-red-500' : hostQuality === 1 ? 'bg-yellow-500' : 'bg-green-500'
+                    hostQuality === 0 || hostQuality === 'poor' ? 'bg-red-500' : hostQuality === 1 || hostQuality === 'good' ? 'bg-yellow-500' : 'bg-green-500'
                   }`} />
                   <div className={`w-0.5 h-1.5 ${
-                    hostQuality === 0 ? 'bg-white/20' : hostQuality === 1 ? 'bg-yellow-500' : 'bg-green-500'
+                    hostQuality === 0 || hostQuality === 'poor' ? 'bg-white/20' : hostQuality === 1 || hostQuality === 'good' ? 'bg-yellow-500' : 'bg-green-500'
                   }`} />
                   <div className={`w-0.5 h-2 ${
-                    hostQuality === 0 || hostQuality === 1 ? 'bg-white/20' : 'bg-green-500'
+                    hostQuality === 0 || hostQuality === 'poor' || hostQuality === 1 || hostQuality === 'good' ? 'bg-white/20' : 'bg-green-500'
                   }`} />
                 </div>
                 <span className="text-xs font-bold text-white">Live</span>
@@ -1343,93 +1380,19 @@ export default function CommunityRoomPage({
               </div>
             </div>
 
-            <div
-              ref={chatScrollRef}
-              className="scrollbar-hide flex-1 space-y-4 overflow-y-auto p-4"
-            >
-              {messages
-                .filter((msg) =>
-                  activeTab === 'history'
-                    ? msg.type === 'status'
-                    : msg.type === 'msg' || visibleStatusIds.has(msg.id)
-                )
-                .map((msg) => (
-                  <React.Fragment key={msg.id}>
-                    {msg.type === 'status' ? (
-                      <div className="flex w-full justify-center px-4 py-2">
-                        <span className="text-center text-[12px] font-bold text-white/30 italic">
-                          {msg.message}
-                        </span>
-                      </div>
-                    ) : (
-                      <div
-                        className={`group relative flex items-start gap-3 ${msg.username === user?.username ? 'flex-row-reverse' : 'flex-row'}`}
-                        onClick={(e) => {
-                          // Chỉ admin hoặc host mới có quyền
-                          if (!isAdmin && !isHost) return;
-                          // Không thể tự cấm/xóa tin nhắn của chính mình
-                          if (msg.username === user?.username) return;
-                          setContextMenu({
-                            x: e.clientX,
-                            y: e.clientY,
-                            messageId: msg.id,
-                            messageUsername: msg.username,
-                          });
-                        }}
-                      >
-                        <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full shadow-lg">
-                          {msg.avatarUrl ? (
-                            <Image
-                              src={msg.avatarUrl}
-                              alt={msg.username}
-                              fill
-                              unoptimized
-                              className="object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-black text-white/40">
-                              {msg.username?.[0]?.toUpperCase()}
-                            </div>
-                          )}
-                        </div>
-                        <div
-                          className={`flex flex-col ${msg.username === user?.username ? 'items-end' : 'items-start'}`}
-                        >
-                          <span
-                            className={`text-[10px] font-black uppercase ${msg.username === room?.host?.username ? 'text-[#C800DF]' : 'text-white/40'}`}
-                          >
-                            {msg.username}
-                            {msg.username === user?.username && ' (Bạn)'}
-                          </span>
-                          {/* Badge muted - chỉ admin/host thấy */}
-                          {(isAdmin || isHost) &&
-                            mutedUsers[msg.username] &&
-                            Date.now() < mutedUsers[msg.username] && (
-                              <span className="flex items-center gap-0.5 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-400">
-                                🔇 Cấm chat
-                              </span>
-                            )}
-                          <div
-                            className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${msg.username === user?.username ? 'rounded-2xl rounded-tr-none bg-[#C800DF]/20 text-white' : 'text-white/90'}`}
-                          >
-                            {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
-                            msg.message.includes('cloudinary.com') ? (
-                              <img
-                                src={msg.message}
-                                alt="media"
-                                className="max-h-60 rounded-lg"
-                                onClick={() => setSelectedImage(msg.message)}
-                              />
-                            ) : (
-                              msg.message
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </React.Fragment>
-                ))}
-            </div>
+            <ChatList
+              messages={messages}
+              activeTab={activeTab}
+              visibleStatusIds={visibleStatusIds}
+              user={user}
+              isAdmin={isAdmin}
+              isHost={isHost}
+              room={room}
+              mutedUsers={mutedUsers}
+              setContextMenu={setContextMenu}
+              setSelectedImage={setSelectedImage}
+              chatScrollRef={chatScrollRef}
+            />
 
             <div
               className="border-t border-white/5 bg-black/20 p-4"
@@ -1515,7 +1478,7 @@ export default function CommunityRoomPage({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className="absolute right-4 bottom-24 z-50"
+                    className="absolute left-4 bottom-24 z-50"
                   >
                     <EmojiPicker
                       onEmojiClick={onEmojiClick}
@@ -1952,3 +1915,141 @@ export default function CommunityRoomPage({
     </main>
   );
 }
+
+interface ChatListProps {
+  messages: any[];
+  activeTab: string;
+  visibleStatusIds: Set<string>;
+  user: any;
+  isAdmin: boolean;
+  isHost: boolean;
+  room: any;
+  mutedUsers: Record<string, number>;
+  setContextMenu: (menu: any) => void;
+  setSelectedImage: (img: string) => void;
+  chatScrollRef: React.RefObject<HTMLDivElement | null>;
+}
+
+const ChatList = React.memo(({
+  messages,
+  activeTab,
+  visibleStatusIds,
+  user,
+  isAdmin,
+  isHost,
+  room,
+  mutedUsers,
+  setContextMenu,
+  setSelectedImage,
+  chatScrollRef,
+}: ChatListProps) => {
+  return (
+    <div
+      ref={chatScrollRef}
+      className="scrollbar-hide flex-1 space-y-4 overflow-y-auto p-4"
+    >
+      {(() => {
+        const filteredMessages = messages.filter((msg) =>
+          activeTab === 'history'
+            ? msg.type === 'status'
+            : msg.type === 'msg' || visibleStatusIds.has(msg.id)
+        ).slice(-150);
+        
+        return filteredMessages.map((msg, index) => {
+          const prevMsg = filteredMessages[index - 1];
+          const nextMsg = filteredMessages[index + 1];
+          const isFirstInBlock = !prevMsg || prevMsg.username !== msg.username || prevMsg.type !== 'msg';
+          const isLastInBlock = !nextMsg || nextMsg.username !== msg.username || nextMsg.type !== 'msg';
+          
+          return (
+            <motion.div
+              key={msg.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className="w-full"
+            >
+              {msg.type === 'status' ? (
+                <div className="flex w-full justify-center px-4 py-2">
+                  <span className="text-center text-[12px] font-bold text-white/30 italic">
+                    {msg.message}
+                  </span>
+                </div>
+              ) : (
+                <div
+                  className={`group relative flex items-start gap-3 ${msg.username === user?.username ? 'flex-row-reverse' : 'flex-row'} ${isFirstInBlock ? 'mt-3' : 'mt-0.5'}`}
+                  onClick={(e) => {
+                    if (!isAdmin && !isHost) return;
+                    if (msg.username === user?.username) return;
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      messageId: msg.id,
+                      messageUsername: msg.username,
+                    });
+                  }}
+                >
+                  {!isLastInBlock ? (
+                    <div className="w-8 flex-shrink-0" />
+                  ) : (
+                    <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full shadow-lg">
+                      {msg.avatarUrl ? (
+                        <Image
+                          src={msg.avatarUrl}
+                          alt={msg.username}
+                          fill
+                          unoptimized
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-black text-white/40">
+                          {msg.username?.[0]?.toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div
+                    className={`flex flex-col ${msg.username === user?.username ? 'items-end' : 'items-start'}`}
+                  >
+                    {isFirstInBlock && (
+                      <span
+                        className={`text-[10px] font-black uppercase ${msg.username === room?.host?.username ? 'text-[#C800DF]' : 'text-white/40'}`}
+                      >
+                        {msg.username}
+                        {msg.username === user?.username && ' (Bạn)'}
+                      </span>
+                    )}
+                    {(isAdmin || isHost) &&
+                      mutedUsers[msg.username] &&
+                      Date.now() < mutedUsers[msg.username] && (
+                        <span className="flex items-center gap-0.5 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-400">
+                          🔇 Cấm chat
+                        </span>
+                      )}
+                    <div
+                      className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${msg.username === user?.username ? 'rounded-2xl rounded-tr-none bg-[#C800DF]/20 text-white' : 'text-white/90'}`}
+                    >
+                      {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
+                      msg.message.includes('cloudinary.com') ? (
+                        <img
+                          src={msg.message}
+                          alt="media"
+                          className="max-h-60 rounded-lg"
+                          onClick={() => setSelectedImage(msg.message)}
+                        />
+                      ) : (
+                        msg.message
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          );
+        });
+      })()}
+    </div>
+  );
+});
+
+ChatList.displayName = 'ChatList';
