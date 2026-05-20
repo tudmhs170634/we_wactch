@@ -30,7 +30,7 @@ import {
   SubGroupMicToggle,
   StreamMode,
 } from '@/src/components/rooms/LiveKitRoom';
-import { useTracks } from '@livekit/components-react';
+import { useTracks, useLocalParticipant } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import {
   Play,
@@ -94,6 +94,32 @@ function ScreenShareTracker({
   useEffect(() => {
     onStateChange(isActive);
   }, [isActive, onStateChange]);
+
+  return null;
+}
+
+function HostMediaTracker({
+  isHost,
+  onMicChange,
+  onCamChange,
+}: {
+  isHost: boolean;
+  onMicChange: (enabled: boolean) => void;
+  onCamChange: (enabled: boolean) => void;
+}) {
+  const { isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
+
+  useEffect(() => {
+    if (isHost) {
+      onMicChange(isMicrophoneEnabled);
+    }
+  }, [isMicrophoneEnabled, isHost, onMicChange]);
+
+  useEffect(() => {
+    if (isHost) {
+      onCamChange(isCameraEnabled);
+    }
+  }, [isCameraEnabled, isHost, onCamChange]);
 
   return null;
 }
@@ -916,6 +942,13 @@ export default function CommunityRoomPage({
         audioMuted={false}
         streamMode={streamMode}
       >
+        {isHost && (
+          <HostMediaTracker
+            isHost={isHost}
+            onMicChange={setIsHostMicOn}
+            onCamChange={setIsHostCamOn}
+          />
+        )}
         <div className="flex flex-col lg:flex-row flex-1 gap-4 overflow-y-auto lg:overflow-hidden p-0 lg:p-4">
           {/* LEFT SIDEBAR */}
           <div className="hidden lg:flex w-[280px] flex-shrink-0 flex-col gap-4 overflow-hidden order-2 lg:order-1">
@@ -1963,7 +1996,7 @@ const ChatList = React.memo(({
             followOutput="smooth"
             alignToBottom
             className="h-full w-full"
-            itemContent={(index, msg) => {
+            itemContent={(index: number, msg: any) => {
               const prevMsg = filteredMessages[index - 1];
               const nextMsg = filteredMessages[index + 1];
               const isFirstInBlock =
