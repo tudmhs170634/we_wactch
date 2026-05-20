@@ -543,11 +543,7 @@ function CameraVolumeControl({ participant }: { participant: any }) {
           console.error('Lỗi khi set volume cho mic:', e);
         }
       }
-      
-      // Tăng Buffer (Playout Delay) lên 2.5s để mượt hình/tiếng
-      if ('setPlayoutDelay' in track) {
-        (track as any).setPlayoutDelay(2.5);
-      }
+
     }
   }, [trackRef, volume]);
 
@@ -763,13 +759,6 @@ export function LiveKitScreenView() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  React.useEffect(() => {
-    const track = tracks[0]?.publication?.track;
-    if (track && 'setPlayoutDelay' in track) {
-      console.log('[LiveKit] Thiết lập playout delay 2.5s cho Screen Share');
-      (track as any).setPlayoutDelay(2.5); // 2.5 giây buffer
-    }
-  }, [tracks]);
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
