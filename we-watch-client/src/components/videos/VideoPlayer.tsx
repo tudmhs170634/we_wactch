@@ -247,7 +247,8 @@ export default function VideoPlayer({
         v.currentTime = lastAction.currentTime;
         v.playbackRate = 1.0;
         if (rateAdjustTimer.current) clearTimeout(rateAdjustTimer.current);
-        if (!v.paused) v.play().catch(() => {});
+        v.play().catch(() => {});
+        setPlaying(true);
         break;
     }
   }, [lastAction, serverTimeOffset]);
@@ -275,15 +276,15 @@ export default function VideoPlayer({
     if (!v) return;
 
     const newPlaying = !playing;
+    
+    // Set flag so native onPlay/onPause doesn't emit duplicate events
+    ignoreNextEvent.current = true;
+    
     if (newPlaying) v.play();
     else v.pause();
+    
     setPlaying(newPlaying);
-
-    // Chỉ gửi event nếu là user bấm
-    if (!ignoreNextEvent.current) {
-      onAction?.(newPlaying ? 'play' : 'pause', v.currentTime);
-    }
-    ignoreNextEvent.current = false;
+    onAction?.(newPlaying ? 'play' : 'pause', v.currentTime);
   };
 
   const toggleMute = () => {
@@ -292,31 +293,52 @@ export default function VideoPlayer({
     setMuted(!muted);
   };
 
-  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     const v = ref.current;
     if (!v) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
     
+    const rect = e.currentTarget.getBoundingClientRect();
     setIsDragging(true);
-    setProgress(pct);
     seekInProgress.current = true;
+    
+    const updateProgress = (clientX: number) => {
+      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      setProgress(pct);
+      
+      if (liveSessionDuration) {
+        const targetLiveTime = pct * liveSessionDuration;
+        setCurrentWatchTime(targetLiveTime);
+        const targetHLSTime = v.duration - (liveSessionDuration - targetLiveTime);
+        v.currentTime = Math.max(0, targetHLSTime);
+      } else {
+        v.currentTime = pct * v.duration;
+        setCurrentWatchTime(v.currentTime);
+      }
+    };
+    
+    updateProgress(e.clientX);
 
-    if (liveSessionDuration) {
-      // Tính thời gian thực tế muốn tua tới
-      const targetLiveTime = pct * liveSessionDuration;
-      setCurrentWatchTime(targetLiveTime);
-      // Ánh xạ sang thời gian của thẻ video HLS
-      const targetHLSTime = v.duration - (liveSessionDuration - targetLiveTime);
-      v.currentTime = Math.max(0, targetHLSTime);
-    } else {
-      v.currentTime = pct * v.duration;
-      setCurrentWatchTime(v.currentTime);
-    }
+    const handlePointerMove = (ev: PointerEvent) => {
+      updateProgress(ev.clientX);
+    };
 
-    v.play().catch(() => {});
-    setPlaying(true);
-    onAction?.('seek', v.currentTime);
+    const handlePointerUp = () => {
+      setIsDragging(false);
+      seekInProgress.current = false;
+      const currentV = ref.current;
+      if (currentV) {
+        ignoreNextEvent.current = true;
+        currentV.play().catch(() => {});
+        setPlaying(true);
+        onAction?.('seek', currentV.currentTime);
+      }
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
   };
 
   const fullscreen = () => ref.current?.requestFullscreen();
@@ -435,13 +457,6 @@ export default function VideoPlayer({
         }}
         onWaiting={() => setLoading(true)}
         onCanPlay={() => setLoading(false)}
-        onSeeked={() => {
-          const v = ref.current;
-          if (v) {
-            v.play().catch(() => {});
-            setPlaying(true);
-          }
-        }}
         onPlaying={() => {
           if (seekInProgress.current) {
             setIsDragging(false);
@@ -576,9 +591,9 @@ export default function VideoPlayer({
           </div>
 
           <div
-            className="group/bar relative h-1.5 w-full cursor-pointer bg-white/20"
-            onClick={seek}
-            onMouseMove={(e) => {
+            className="group/bar relative h-1.5 w-full cursor-pointer bg-white/20 touch-none"
+            onPointerDown={handlePointerDown}
+            onPointerMove={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               const pos = (e.clientX - rect.left) / rect.width;
               
@@ -590,7 +605,7 @@ export default function VideoPlayer({
               setTooltipLeft(e.clientX - rect.left);
               setShowTooltip(true);
             }}
-            onMouseLeave={() => setShowTooltip(false)}
+            onPointerLeave={() => setShowTooltip(false)}
           >
             <div
               className="relative h-full bg-red-500"

@@ -8,6 +8,7 @@ import { MOCK_VIDEOS, MOCK_ROOMS } from '@/src/constants/mockData';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { Virtuoso } from 'react-virtuoso';
 import Select from '@/src/components/ui/Select';
 import {
   getRoom,
@@ -1955,98 +1956,117 @@ const ChatList = React.memo(({
             : msg.type === 'msg' || visibleStatusIds.has(msg.id)
         ).slice(-150);
         
-        return filteredMessages.map((msg, index) => {
-          const prevMsg = filteredMessages[index - 1];
-          const nextMsg = filteredMessages[index + 1];
-          const isFirstInBlock = !prevMsg || prevMsg.username !== msg.username || prevMsg.type !== 'msg';
-          const isLastInBlock = !nextMsg || nextMsg.username !== msg.username || nextMsg.type !== 'msg';
-          
-          return (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
-              className="w-full"
-            >
-              {msg.type === 'status' ? (
-                <div className="flex w-full justify-center px-4 py-2">
-                  <span className="text-center text-[12px] font-bold text-white/30 italic">
-                    {msg.message}
-                  </span>
-                </div>
-              ) : (
+        return (
+          <Virtuoso
+            data={filteredMessages}
+            initialTopMostItemIndex={filteredMessages.length - 1}
+            followOutput="smooth"
+            alignToBottom
+            className="h-full w-full"
+            itemContent={(index, msg) => {
+              const prevMsg = filteredMessages[index - 1];
+              const nextMsg = filteredMessages[index + 1];
+              const isFirstInBlock =
+                !prevMsg || prevMsg.username !== msg.username || prevMsg.type !== 'msg';
+              const isLastInBlock =
+                !nextMsg || nextMsg.username !== msg.username || nextMsg.type !== 'msg';
+
+              return (
                 <div
-                  className={`group relative flex items-start gap-3 ${msg.username === user?.username ? 'flex-row-reverse' : 'flex-row'} ${isFirstInBlock ? 'mt-3' : 'mt-0.5'}`}
-                  onClick={(e) => {
-                    if (!isAdmin && !isHost) return;
-                    if (msg.username === user?.username) return;
-                    setContextMenu({
-                      x: e.clientX,
-                      y: e.clientY,
-                      messageId: msg.id,
-                      messageUsername: msg.username,
-                    });
-                  }}
+                  className="w-full pb-1"
                 >
-                  {!isLastInBlock ? (
-                    <div className="w-8 flex-shrink-0" />
+                  {msg.type === 'status' ? (
+                    <div className="flex w-full justify-center px-4 py-2">
+                      <span className="text-center text-[12px] font-bold italic text-white/30">
+                        {msg.message}
+                      </span>
+                    </div>
                   ) : (
-                    <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full shadow-lg">
-                      {msg.avatarUrl ? (
-                        <Image
-                          src={msg.avatarUrl}
-                          alt={msg.username}
-                          fill
-                          unoptimized
-                          className="object-cover"
-                        />
+                    <div
+                      className={`group relative flex items-start gap-3 ${
+                        msg.username === user?.username ? 'flex-row-reverse' : 'flex-row'
+                      } ${isFirstInBlock ? 'mt-3' : 'mt-0.5'}`}
+                      onClick={(e) => {
+                        if (!isAdmin && !isHost) return;
+                        if (msg.username === user?.username) return;
+                        setContextMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          messageId: msg.id,
+                          messageUsername: msg.username,
+                        });
+                      }}
+                    >
+                      {!isLastInBlock ? (
+                        <div className="w-8 flex-shrink-0" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-black text-white/40">
-                          {msg.username?.[0]?.toUpperCase()}
+                        <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full shadow-lg">
+                          {msg.avatarUrl ? (
+                            <Image
+                              src={msg.avatarUrl}
+                              alt={msg.username}
+                              fill
+                              unoptimized
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-white/10 text-xs font-black text-white/40">
+                              {msg.username?.[0]?.toUpperCase()}
+                            </div>
+                          )}
                         </div>
                       )}
+                      <div
+                        className={`flex flex-col ${
+                          msg.username === user?.username ? 'items-end' : 'items-start'
+                        }`}
+                      >
+                        {isFirstInBlock && (
+                          <span
+                            className={`text-[10px] font-black uppercase ${
+                              msg.username === room?.host?.username
+                                ? 'text-[#C800DF]'
+                                : 'text-white/40'
+                            }`}
+                          >
+                            {msg.username}
+                            {msg.username === user?.username && ' (Bạn)'}
+                          </span>
+                        )}
+                        {(isAdmin || isHost) &&
+                          mutedUsers[msg.username] &&
+                          Date.now() < mutedUsers[msg.username] && (
+                            <span className="flex items-center gap-0.5 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-400">
+                              🔇 Cấm chat
+                            </span>
+                          )}
+                        <div
+                          className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${
+                            msg.username === user?.username
+                              ? 'rounded-2xl rounded-tr-none bg-[#C800DF]/20 text-white'
+                              : 'text-white/90'
+                          }`}
+                        >
+                          {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
+                          msg.message.includes('cloudinary.com') ? (
+                            <img
+                              src={msg.message}
+                              alt="media"
+                              className="max-h-60 rounded-lg cursor-pointer"
+                              onClick={() => setSelectedImage(msg.message)}
+                            />
+                          ) : (
+                            msg.message
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
-                  <div
-                    className={`flex flex-col ${msg.username === user?.username ? 'items-end' : 'items-start'}`}
-                  >
-                    {isFirstInBlock && (
-                      <span
-                        className={`text-[10px] font-black uppercase ${msg.username === room?.host?.username ? 'text-[#C800DF]' : 'text-white/40'}`}
-                      >
-                        {msg.username}
-                        {msg.username === user?.username && ' (Bạn)'}
-                      </span>
-                    )}
-                    {(isAdmin || isHost) &&
-                      mutedUsers[msg.username] &&
-                      Date.now() < mutedUsers[msg.username] && (
-                        <span className="flex items-center gap-0.5 rounded-full bg-red-500/20 px-1.5 py-0.5 text-[9px] font-bold text-red-400">
-                          🔇 Cấm chat
-                        </span>
-                      )}
-                    <div
-                      className={`mt-0.5 px-3 py-1.5 text-[14px] leading-tight ${msg.username === user?.username ? 'rounded-2xl rounded-tr-none bg-[#C800DF]/20 text-white' : 'text-white/90'}`}
-                    >
-                      {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
-                      msg.message.includes('cloudinary.com') ? (
-                        <img
-                          src={msg.message}
-                          alt="media"
-                          className="max-h-60 rounded-lg"
-                          onClick={() => setSelectedImage(msg.message)}
-                        />
-                      ) : (
-                        msg.message
-                      )}
-                    </div>
-                  </div>
                 </div>
-              )}
-            </motion.div>
-          );
-        });
+              );
+            }}
+          />
+        );
       })()}
     </div>
   );

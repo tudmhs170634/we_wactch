@@ -268,6 +268,10 @@ export default function LiveKitRoom({
       onDisconnected={onDisconnect}
       data-lk-theme="default"
       className="flex h-full w-full flex-col gap-2"
+      options={{
+        adaptiveStream: true,
+        dynacast: true,
+      }}
     >
       <div className="flex flex-1 gap-2 overflow-hidden p-1">
         <MyVideoLayout />
