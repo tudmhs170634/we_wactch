@@ -407,7 +407,6 @@ export const useSocket = (
     videoState,
     lastVideoAction,
     videoChangeTrigger,
-    currentHostId,
     setCurrentHostId,
     mutedUsers,
     chatMuteInfo,

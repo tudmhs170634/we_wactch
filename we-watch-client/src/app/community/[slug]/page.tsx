@@ -1428,6 +1428,7 @@ export default function CommunityRoomPage({
               setContextMenu={setContextMenu}
               setSelectedImage={setSelectedImage}
               chatScrollRef={chatScrollRef}
+              effectiveHostUsername={effectiveHostUsername}
             />
 
             <div
@@ -1964,6 +1965,7 @@ interface ChatListProps {
   setContextMenu: (menu: any) => void;
   setSelectedImage: (img: string) => void;
   chatScrollRef: React.RefObject<HTMLDivElement | null>;
+  effectiveHostUsername?: string;
 }
 
 const ChatList = React.memo(({
@@ -1978,6 +1980,7 @@ const ChatList = React.memo(({
   setContextMenu,
   setSelectedImage,
   chatScrollRef,
+  effectiveHostUsername,
 }: ChatListProps) => {
   return (
     <div
