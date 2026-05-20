@@ -944,7 +944,7 @@ export default function CommunityRoomPage({
         audioMuted={false}
         streamMode={streamMode}
       >
-        {isHost && (
+        {isHost && liveKitToken && (
           <HostMediaTracker
             isHost={isHost}
             onMicChange={setIsHostMicOn}
