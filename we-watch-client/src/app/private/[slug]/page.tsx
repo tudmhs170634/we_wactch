@@ -102,6 +102,7 @@ export default function WeWatchRoomPage({
     playVideoFromWishlist,
     socketError,
     currentHostId,
+    currentHostUsername,
     setCurrentHostId,
     sendVideoAction,
     lastVideoAction,
@@ -298,8 +299,7 @@ export default function WeWatchRoomPage({
     if (room && user) {
       // Ưu tiên host từ socket (real-time), nếu chưa có thì dùng từ room data (initial)
       const effectiveHostId = currentHostId || room.hostId || room.host?.id;
-      const isRoomHost =
-        effectiveHostId === user.id || room.host?.username === user.username;
+      const isRoomHost = effectiveHostId === user.id;
       setIsHost(isRoomHost);
 
       // Sync initial hostId to socket state
@@ -503,6 +503,8 @@ export default function WeWatchRoomPage({
     setKickTarget(name);
   };
 
+  const effectiveHostUsername = currentHostUsername || room?.host?.username;
+
   return (
     <main className="scrollbar-hide flex h-screen w-screen flex-col overflow-auto bg-[#0A0A0B] font-sans text-slate-100">
       {/* CUSTOM ROOM HEADER */}
@@ -561,30 +563,32 @@ export default function WeWatchRoomPage({
 
           {!isMonitorMode && (
             <>
-              <button
-                onClick={handleSync}
-                disabled={isSyncing}
-                className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
-              >
-                <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
-                <div className="flex flex-col items-start leading-tight">
-                  <span>
-                    {isSyncing
-                      ? 'Đang đồng bộ...'
-                      : syncDone
-                        ? 'Đã đồng bộ!'
-                        : 'Đồng bộ với Host'}
-                  </span>
-                  {!isHost && Math.abs(timeOffset) > 1.5 && !isSyncing && (
-                    <span
-                      className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
-                    >
-                      Lệch: {timeOffset > 0 ? '+' : ''}
-                      {timeOffset.toFixed(1)}s
+              {!isHost && (
+                <button
+                  onClick={handleSync}
+                  disabled={isSyncing}
+                  className={`flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-bold transition-all hover:bg-white/10 ${isSyncing ? 'animate-pulse' : ''}`}
+                >
+                  <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} />
+                  <div className="flex flex-col items-start leading-tight">
+                    <span>
+                      {isSyncing
+                        ? 'Đang đồng bộ...'
+                        : syncDone
+                          ? 'Đã đồng bộ!'
+                          : 'Đồng bộ với Host'}
                     </span>
-                  )}
-                </div>
-              </button>
+                    {Math.abs(timeOffset) > 1.5 && !isSyncing && (
+                      <span
+                        className={`text-[9px] ${Math.abs(timeOffset) > 5 ? 'text-red-400' : 'text-yellow-400'}`}
+                      >
+                        Lệch: {timeOffset > 0 ? '+' : ''}
+                        {timeOffset.toFixed(1)}s
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )}
 
               <button
                 onClick={() => setIsLeaveModalOpen(true)}
@@ -978,12 +982,13 @@ export default function WeWatchRoomPage({
                                 </div>
                               )}
                             </div>
+
                             <span className="text-sm font-medium text-white/80">
                               {m.username}
                               {m.username === user?.username && ' (Bạn)'}
                             </span>
                           </div>
-                          {isHost && m.username !== room?.host?.username && (
+                          {isHost && m.username !== effectiveHostUsername && (
                             <button
                               onClick={() => handleKick(m.username)}
                               className="text-red-500 opacity-0 transition-all group-hover:opacity-100 hover:scale-125"
