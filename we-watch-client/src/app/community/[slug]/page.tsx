@@ -439,6 +439,7 @@ export default function CommunityRoomPage({
     playVideoFromWishlist,
     socketError,
     currentHostId,
+    currentHostUsername,
     setCurrentHostId,
     sendVideoAction,
     lastVideoAction,
@@ -489,6 +490,8 @@ export default function CommunityRoomPage({
     }
   );
 
+  const effectiveHostUsername = currentHostUsername || room?.host?.username;
+
   // Tự động cuộn xuống dưới khi có tin nhắn mới
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -498,8 +501,8 @@ export default function CommunityRoomPage({
 
   const viewers = useMemo(() => {
     if (!socketMembers) return [];
-    return socketMembers.filter((m) => m.username !== room?.host?.username);
-  }, [socketMembers, room?.host?.username]);
+    return socketMembers.filter((m) => m.username !== effectiveHostUsername);
+  }, [socketMembers, effectiveHostUsername]);
 
   const [isHydrated, setIsHydrated] = useState(false);
   const [welcomeUser, setWelcomeUser] = useState<string | null>(null);
@@ -530,8 +533,7 @@ export default function CommunityRoomPage({
   useEffect(() => {
     if (room && user) {
       const effectiveHostId = currentHostId || room.hostId || room.host?.id;
-      const isActuallyHost =
-        effectiveHostId === user.id || room.host?.username === user.username;
+      const isActuallyHost = effectiveHostId === user.id;
       setIsHost(isActuallyHost);
 
       if (!currentHostId && (room.hostId || room.host?.id)) {
@@ -1355,7 +1357,7 @@ export default function CommunityRoomPage({
               <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-black/60 px-2 py-1 backdrop-blur-md">
                 <div className="h-1.5 w-1.5 rounded-full bg-[#C800DF]"></div>
                 <span className="text-[10px] font-bold text-white">
-                  Host: {room?.host?.username || 'Đang tải...'}
+                  Host: {effectiveHostUsername || 'Đang tải...'}
                 </span>
               </div>
               {liveKitToken && (
@@ -2024,7 +2026,7 @@ const ChatList = React.memo(({
                         {isFirstInBlock && (
                           <span
                             className={`text-[10px] font-black uppercase ${
-                              msg.username === room?.host?.username
+                              msg.username === effectiveHostUsername
                                 ? 'text-[#C800DF]'
                                 : 'text-white/40'
                             }`}

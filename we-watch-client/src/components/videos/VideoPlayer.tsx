@@ -254,22 +254,41 @@ export default function VideoPlayer({
   }, [lastAction, serverTimeOffset]);
 
   // ── Tính toán độ lệch với Host ──
+  const hostStateRef = useRef<{ currentTime: number; isPlaying: boolean; lastUpdated: number } | null>(null);
+
+  useEffect(() => {
+    if (initialState) {
+      hostStateRef.current = { ...initialState };
+    }
+  }, [initialState]);
+
+  useEffect(() => {
+    if (lastAction) {
+      hostStateRef.current = {
+        currentTime: lastAction.currentTime,
+        isPlaying: lastAction.action === 'play' || lastAction.action === 'seek',
+        lastUpdated: lastAction.sentAt
+      };
+    }
+  }, [lastAction]);
+
   useEffect(() => {
     const timer = setInterval(() => {
-      if (!ref.current || !initialState) return;
+      if (!ref.current || !hostStateRef.current) return;
       const v = ref.current;
+      const hs = hostStateRef.current;
 
-      // Tính thời gian Host đáng lẽ đang ở đó
-      const elapsed = (Date.now() - initialState.lastUpdated) / 1000;
-      const hostTime =
-        initialState.currentTime + (initialState.isPlaying ? elapsed : 0);
+      // Tính thời gian Host đáng lẽ đang ở đó (sử dụng NTP server time)
+      const nowServer = Date.now() + serverTimeOffset;
+      const elapsed = (nowServer - hs.lastUpdated) / 1000;
+      const hostTime = hs.currentTime + (hs.isPlaying ? elapsed : 0);
 
       const diff = v.currentTime - hostTime;
       onOffsetChange?.(diff);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [initialState, onOffsetChange]);
+  }, [onOffsetChange, serverTimeOffset]);
 
   const togglePlay = () => {
     const v = ref.current;

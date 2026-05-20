@@ -81,6 +81,7 @@ export const useSocket = (
   const [socketError, setSocketError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [currentHostId, setCurrentHostId] = useState<string | null>(null);
+  const [currentHostUsername, setCurrentHostUsername] = useState<string | null>(null);
   const [videoState, setVideoState] = useState<VideoState | null>(null);
   const [lastVideoAction, setLastVideoAction] = useState<VideoActionEvent | null>(null);
   const [videoChangeTrigger, setVideoChangeTrigger] = useState(0);
@@ -201,8 +202,11 @@ export const useSocket = (
       setTimeout(() => setWishlistError(null), 3000);
     });
 
-    socket.on('hostTransferred', ({ newHostId }: { newHostName: string, newHostId: string }) => {
+    socket.on('hostTransferred', ({ newHostId, newHostUsername }: { newHostName: string, newHostId: string, newHostUsername: string }) => {
       setCurrentHostId(newHostId);
+      if (newHostUsername) {
+        setCurrentHostUsername(newHostUsername);
+      }
     });
 
     // ── Video Sync ──────────────────────────────────────────────────────────
@@ -384,6 +388,8 @@ export const useSocket = (
   return {
     socket: socketRef.current,
     isConnected,
+    currentHostId,
+    currentHostUsername,
     socketError,
     members,
     messages,
