@@ -5,6 +5,7 @@ import {
   UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 
@@ -13,6 +14,7 @@ export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
   @Post('image')
+  @Throttle({ upload: { limit: 10, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('file'))
   async uploadImage(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('File is required');
@@ -21,6 +23,7 @@ export class UploadController {
   }
 
   @Post('thumbnail')
+  @Throttle({ upload: { limit: 10, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('file'))
   async uploadThumbnail(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('File is required');
