@@ -1,296 +1,305 @@
 'use client';
 
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+// Store & Services
+import { useAuthStore } from '@/src/store/useAuthStore';
 import {
-  Users,
-  Tv,
-  Activity,
-  AlertCircle,
-  TrendingUp,
-  UserPlus,
-  PlayCircle,
-  Settings,
-  Search,
-  MoreVertical,
-  ChevronRight,
-} from 'lucide-react';
-import Header from '@/src/components/Header';
-import Background from '@/src/components/layout/Background';
-import Image from 'next/image';
+  getVideosAdmin,
+  approveVideo,
+  deleteVideo,
+  getStreamUrl,
+} from '@/src/services/video';
+import { updateProfile, uploadImage, logout } from '@/src/services/auth';
+import { getAllUsers, banUser, switchRole, User } from '@/src/services/user';
+import { getAllRooms, Room } from '@/src/services/room';
+import { useDebounce } from '@/src/hooks/useDebounce';
+
+// Components
+import Sidebar, { TabType } from './components/Sidebar';
+import TopNav from './components/TopNav';
+import DashboardView from './components/DashboardView';
+import UsersView from './components/UsersView';
+import MoviesView, { AdminMovie } from './components/MoviesView';
+import MovieDetailView from './components/MovieDetailView';
+import RoomsView from './components/RoomsView';
+import ReportsView from './components/ReportsView';
+import ProfileModal from './components/ProfileModal';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getAdminStats } from '@/src/services/admin';
 
 const AdminDashboard = () => {
-  // Mock Stats
-  const stats = [
-    {
-      label: 'Tổng người dùng',
-      value: '2,845',
-      change: '+12%',
-      icon: Users,
-      color: '#C800DF',
-    },
-    {
-      label: 'Phòng đang mở',
-      value: '142',
-      change: '+5%',
-      icon: PlayCircle,
-      color: '#E60076',
-    },
-    {
-      label: 'Lượt xem hôm nay',
-      value: '18.5K',
-      change: '+24%',
-      icon: Tv,
-      color: '#4F46E5',
-    },
-    {
-      label: 'Báo cáo vi phạm',
-      value: '12',
-      change: '-2%',
-      icon: AlertCircle,
-      color: '#EF4444',
-    },
-  ];
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [selectedMovie, setSelectedMovie] = useState<AdminMovie | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
-  // Mock Recent Users
-  const recentUsers = [
-    {
-      name: 'Nguyễn Văn A',
-      email: 'vana@gmail.com',
-      role: 'User',
-      status: 'Online',
-      avatar: 'https://i.pravatar.cc/150?u=1',
-    },
-    {
-      name: 'Trần Thị B',
-      email: 'thib@gmail.com',
-      role: 'User',
-      status: 'Offline',
-      avatar: 'https://i.pravatar.cc/150?u=2',
-    },
-    {
-      name: 'Lê Văn C',
-      email: 'vanc@gmail.com',
-      role: 'Moderator',
-      status: 'Online',
-      avatar: 'https://i.pravatar.cc/150?u=3',
-    },
-    {
-      name: 'Phạm Thị D',
-      email: 'thid@gmail.com',
-      role: 'User',
-      status: 'Busy',
-      avatar: 'https://i.pravatar.cc/150?u=4',
-    },
-  ];
+  // Data States
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentStreamUrl, setCurrentStreamUrl] = useState<string | null>(null);
+  const [roomFilter, setRoomFilter] = useState('');
+  const [globalSearchTerm, setGlobalSearchTerm] = useState('');
+
+  const debouncedSearch = useDebounce(globalSearchTerm, 500);
+  const cleanSearch = debouncedSearch.trim();
+
+  // Auth Store
+  const { user, login: updateLocalUser } = useAuthStore();
+
+  // --- Fetchers ---
+
+  const { data: stats, isLoading: isStatsLoading } = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: getAdminStats,
+    enabled: activeTab === 'dashboard',
+    staleTime: 60 * 1000, // Nhớ cache lại 1 phút cho mượt
+  });
+
+  // Initial Load & Tab Change
+
+  // Security Link Fetcher
+  useEffect(() => {
+    if (selectedMovie) {
+      getStreamUrl(selectedMovie.id)
+        .then((res) => setCurrentStreamUrl(res.url))
+        .catch(() => toast.error('Không thể tải link video bảo mật'));
+    } else {
+      setCurrentStreamUrl(null);
+    }
+  }, [selectedMovie]);
+
+  // --- Actions ---
+
+  const handleApproveMovie = async (id: string) => {
+    try {
+      await approveVideo(id);
+      toast.success('Duyệt video thành công');
+      queryClient.invalidateQueries({ queryKey: ['admin-movies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      if (selectedMovie?.id === id) setSelectedMovie(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Lỗi khi duyệt video');
+    }
+  };
+
+  const handleDeleteMovie = async (id: string) => {
+    if (!confirm('Bạn có chắc chắn muốn xóa video này?')) return;
+    try {
+      await deleteVideo(id);
+      toast.success('Xóa video thành công');
+      queryClient.invalidateQueries({ queryKey: ['admin-movies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+      if (selectedMovie?.id === id) setSelectedMovie(null);
+    } catch (error: any) {
+      toast.error(error.message || 'Lỗi khi xóa video');
+    }
+  };
+
+  const handleBanUser = async (id: string, isBanned: boolean) => {
+    try {
+      await banUser(id, isBanned);
+      toast.success(isBanned ? 'Đã khóa tài khoản' : 'Đã mở khóa tài khoản');
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (error: any) {
+      toast.error(error.message || 'Lỗi khi xử lý người dùng');
+    }
+  };
+
+  const handleSwitchRole = async (id: string) => {
+    try {
+      await switchRole(id);
+      toast.success('Đã thay đổi vai trò thành công');
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    } catch (error: any) {
+      toast.error(error.message || 'Lỗi khi đổi vai trò');
+    }
+  };
+
+  // Profile Modal Logic
+  const [editName, setEditName] = useState(user?.username || '');
+  const [editAvatar, setEditAvatar] = useState(user?.avatarUrl || '');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleUpdateProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) {
+      toast.error('Tên không được để trống');
+      return;
+    }
+    setIsUpdatingProfile(true);
+    try {
+      const response = await updateProfile({
+        username: editName,
+        avatarUrl: editAvatar,
+      });
+      updateLocalUser(response.user, response.accessToken);
+      toast.success('Cập nhật hồ sơ thành công');
+      setIsProfileModalOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Cập nhật thất bại');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const loadingToast = toast.loading('Đang tải ảnh lên...');
+    try {
+      const { url } = await uploadImage(file);
+      setEditAvatar(url);
+      toast.success('Tải ảnh lên thành công', { id: loadingToast });
+    } catch (error) {
+      toast.error('Tải ảnh lên thất bại', { id: loadingToast });
+    }
+  };
+
+  const getSearchPlaceholder = () => {
+    switch (activeTab) {
+      case 'users':
+        return 'Tìm username hoặc email...';
+      case 'rooms':
+        return 'Tìm tên phòng chiếu...';
+      case 'all_movies':
+      case 'movie_queue':
+        return 'Tìm tiêu đề video...';
+      default:
+        return 'Tìm kiếm dữ liệu...';
+    }
+  };
 
   return (
-    <main className="relative min-h-screen font-sans text-slate-200">
-      <Background />
-      <Header />
+    <main className="bg-background min-h-screen font-sans text-white">
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={(tab) => {
+          setGlobalSearchTerm('');
+          setActiveTab(tab);
+        }}
+        setSelectedMovie={setSelectedMovie}
+        onLogout={() => logout()}
+      />
 
-      <div className="relative z-10 mx-auto max-w-7xl px-6 pt-32 pb-20">
-        {/* Page Header */}
-        <div className="mb-10 flex flex-col justify-between gap-6 md:flex-row md:items-center">
-          <div>
-            <motion.h1
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="text-4xl font-black tracking-tight text-white"
-            >
-              Quản trị{' '}
-              <span className="bg-gradient-to-r from-[#C800DF] to-[#E60076] bg-clip-text text-transparent">
-                Hệ thống
-              </span>
-            </motion.h1>
-            <p className="mt-2 text-white/50">
-              Chào mừng trở lại, Admin. Đây là tổng quan về We Watch hôm nay.
-            </p>
-          </div>
+      <div className="ml-64 min-h-screen p-10">
+        <TopNav
+          user={user}
+          onProfileClick={() => {
+            setEditName(user?.username || '');
+            setEditAvatar(user?.avatarUrl || '');
+            setIsProfileModalOpen(true);
+          }}
+          searchTerm={globalSearchTerm}
+          onSearchChange={setGlobalSearchTerm}
+          placeholder={getSearchPlaceholder()}
+        />
 
-          <div className="flex items-center gap-3">
-            <div className="glass relative flex items-center rounded-2xl px-4 py-2">
-              <Search size={18} className="text-white/30" />
-              <input
-                type="text"
-                placeholder="Tìm kiếm..."
-                className="bg-transparent px-3 py-1 text-sm outline-none placeholder:text-white/20"
-              />
-            </div>
-            <button className="glass flex h-11 w-11 items-center justify-center rounded-2xl transition-colors hover:bg-white/10">
-              <Settings size={20} className="text-white/70" />
-            </button>
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat, i) => (
+        <AnimatePresence mode="wait">
+          {selectedMovie ? (
             <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className="glass group relative overflow-hidden rounded-[32px] p-6 transition-all hover:translate-y-[-4px]"
+              key="movie-detail"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
             >
-              <div
-                className="absolute -top-6 -right-6 h-24 w-24 rounded-full opacity-10 blur-2xl"
-                style={{ backgroundColor: stat.color }}
+              <MovieDetailView
+                movie={selectedMovie}
+                streamUrl={currentStreamUrl}
+                onBack={() => setSelectedMovie(null)}
+                onApprove={handleApproveMovie}
+                onDelete={handleDeleteMovie}
               />
-              <div className="flex items-start justify-between">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-white/80 transition-colors group-hover:bg-white/10">
-                  <stat.icon size={24} style={{ color: stat.color }} />
-                </div>
-                <span
-                  className={`text-xs font-bold ${stat.change.startsWith('+') ? 'text-green-400' : 'text-red-400'}`}
-                >
-                  {stat.change}
-                </span>
-              </div>
-              <div className="mt-6">
-                <p className="text-sm font-bold tracking-wider text-white/40 uppercase">
-                  {stat.label}
-                </p>
-                <h3 className="mt-1 text-3xl font-black text-white">
-                  {stat.value}
-                </h3>
-              </div>
             </motion.div>
-          ))}
-        </div>
-
-        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
-          {/* Recent Users Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="glass col-span-1 flex flex-col rounded-[32px] p-8 lg:col-span-2"
-          >
-            <div className="mb-8 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">
-                Người dùng mới nhất
-              </h2>
-              <button className="text-primary text-sm font-bold hover:underline">
-                Xem tất cả
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {recentUsers.map((user, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-2xl bg-white/5 p-4 transition-colors hover:bg-white/10"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="relative h-12 w-12 overflow-hidden rounded-full border-2 border-white/10">
-                      <Image
-                        src={user.avatar}
-                        alt={user.name}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-white">{user.name}</h4>
-                      <p className="text-xs text-white/40">{user.email}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-8">
-                    <div className="hidden sm:block">
-                      <span className="rounded-full bg-white/5 px-3 py-1 text-[10px] font-black text-white/60 uppercase">
-                        {user.role}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-2 w-2 rounded-full ${
-                          user.status === 'Online'
-                            ? 'bg-green-500'
-                            : user.status === 'Busy'
-                              ? 'bg-yellow-500'
-                              : 'bg-white/20'
-                        }`}
-                      />
-                      <span className="hidden text-xs font-medium text-white/50 md:block">
-                        {user.status}
-                      </span>
-                    </div>
-                    <button className="text-white/20 transition-colors hover:text-white">
-                      <MoreVertical size={20} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Activity Timeline Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="glass flex flex-col rounded-[32px] p-8"
-          >
-            <div className="mb-8 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">Hoạt động</h2>
-              <Activity size={20} className="text-primary" />
-            </div>
-
-            <div className="relative space-y-8 before:absolute before:top-2 before:left-[11px] before:h-[calc(100%-16px)] before:w-[2px] before:bg-white/5">
-              {[
-                {
-                  time: '10 phút trước',
-                  action: 'Video "Inception" được báo cáo',
-                  type: 'warning',
-                },
-                {
-                  time: '25 phút trước',
-                  action: 'Phòng "Chilling Together" đã đóng',
-                  type: 'info',
-                },
-                {
-                  time: '1 giờ trước',
-                  action: 'User @trungne vừa đăng ký',
-                  type: 'success',
-                },
-                {
-                  time: '2 giờ trước',
-                  action: 'Bảo trì hệ thống hoàn tất',
-                  type: 'system',
-                },
-              ].map((item, i) => (
-                <div key={i} className="relative pl-10">
-                  <div
-                    className={`absolute top-1 left-0 h-6 w-6 rounded-full border-4 border-[#0A0A0B] bg-white/10 ${
-                      item.type === 'warning'
-                        ? 'bg-red-500'
-                        : item.type === 'success'
-                          ? 'bg-green-500'
-                          : 'bg-primary'
-                    }`}
+          ) : (
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              {isLoading && (
+                <div className="flex flex-col items-center justify-center rounded-3xl border border-white/5 bg-[#111113] py-20 shadow-sm">
+                  <Loader2
+                    size={40}
+                    className="text-primary mb-4 animate-spin"
                   />
-                  <p className="text-xs font-bold text-white/30 uppercase">
-                    {item.time}
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-white/80">
-                    {item.action}
+                  <p className="text-xs font-black tracking-widest text-gray-400 uppercase">
+                    Đang tải dữ liệu hệ thống...
                   </p>
                 </div>
-              ))}
-            </div>
-
-            <button className="group mt-auto flex w-full items-center justify-center gap-2 rounded-2xl bg-white/5 py-4 text-sm font-bold text-white transition-all hover:bg-white/10">
-              Xem nhật ký hệ thống
-              <ChevronRight
-                size={18}
-                className="transition-transform group-hover:translate-x-1"
-              />
-            </button>
-          </motion.div>
-        </div>
+              )}
+              {!isLoading && (
+                <>
+                  {activeTab === 'dashboard' && (
+                    <DashboardView
+                      stats={
+                        stats || {
+                          usersCount: 0,
+                          roomsCount: 0,
+                          moviesCount: 0,
+                          pendingCount: 0,
+                        }
+                      }
+                    />
+                  )}
+                  {activeTab === 'users' && (
+                    <UsersView
+                      globalSearchTerm={globalSearchTerm}
+                      onBanUser={handleBanUser}
+                      onSwitchRole={handleSwitchRole}
+                    />
+                  )}
+                  {activeTab === 'all_movies' && (
+                    <MoviesView
+                      type="all"
+                      globalSearchTerm={cleanSearch}
+                      onSelectMovie={setSelectedMovie}
+                      onApprove={handleApproveMovie}
+                      onDelete={handleDeleteMovie}
+                    />
+                  )}
+                  {activeTab === 'movie_queue' && (
+                    <MoviesView
+                      type="queue"
+                      globalSearchTerm={cleanSearch}
+                      onSelectMovie={setSelectedMovie}
+                      onApprove={handleApproveMovie}
+                      onDelete={handleDeleteMovie}
+                    />
+                  )}
+                  {activeTab === 'rooms' && (
+                    <RoomsView
+                      globalSearchTerm={cleanSearch}
+                      filterType={roomFilter}
+                      onFilterChange={setRoomFilter}
+                    />
+                  )}
+                  {activeTab === 'reports' && <ReportsView />}
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={user}
+        editName={editName}
+        setEditName={setEditName}
+        editAvatar={editAvatar}
+        isUpdating={isUpdatingProfile}
+        onAvatarClick={() => fileInputRef.current?.click()}
+        onAvatarChange={handleAvatarUpload}
+        onSubmit={handleUpdateProfileSubmit}
+        fileInputRef={fileInputRef}
+      />
     </main>
   );
 };

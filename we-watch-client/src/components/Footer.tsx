@@ -1,7 +1,20 @@
+'use client';
+
 import Link from 'next/link';
 import React from 'react';
+import { usePathname } from 'next/navigation';
 
 const Footer = () => {
+  const pathname = usePathname();
+
+  if (
+    pathname?.includes('/private/') ||
+    pathname?.includes('/community/') ||
+    pathname?.includes('/admin')
+  ) {
+    return null;
+  }
+
   return (
     <footer className="relative z-20 border-t border-white/5 bg-[#050506] px-6 py-10">
       <div className="mx-auto flex max-w-7xl flex-col items-center">
@@ -14,7 +27,7 @@ const Footer = () => {
 
         {/* Tagline */}
         <p className="mb-10 max-w-xl text-center leading-relaxed font-medium text-slate-300">
-          "Có những bộ phim, xem một mình thì bình thường —{' '}
+          "Có những bộ video, xem một mình thì bình thường —{' '}
           <br className="hidden md:block" />
           xem cùng nhau lại thành kỷ niệm."
         </p>

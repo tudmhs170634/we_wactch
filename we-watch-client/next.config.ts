@@ -27,9 +27,19 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'api.dicebear.com',
       },
+      {
+        protocol: 'https',
+        hostname: '**.fbcdn.net',
+        search: '',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.digitaloceanspaces.com',
+      },
     ],
   },
   reactStrictMode: false,
+  output: 'standalone',
 };
 
 export default nextConfig;

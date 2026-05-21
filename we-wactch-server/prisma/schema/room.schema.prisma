@@ -1,14 +1,15 @@
 model Room {
-  id           String    @id @default(uuid()) @db.Uuid
-  title        String
-  slug         String    @unique
-  type         RoomType  @default(private)
-  hostId       String?   @db.Uuid
-  host         User?     @relation("HostRooms", fields: [hostId], references: [id], onDelete: SetNull)
-  videoId      String?   @db.Uuid
-  video        Video?    @relation("VideoInRooms", fields: [videoId], references: [id], onDelete: SetNull)
-  password     String?
-  maxUsers     Int       @default(5)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String
+  slug      String   @unique
+  image     String?
+  type      RoomType @default(private)
+  hostId    String?  @db.Uuid
+  videoId   String?  @db.Uuid
+  password  String?
+  maxUsers  Int      @default(5)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  host      User?    @relation("HostRooms", fields: [hostId], references: [id])
+  video     Video?   @relation("VideoInRooms", fields: [videoId], references: [id])
 }

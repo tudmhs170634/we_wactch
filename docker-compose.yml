@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./we-wactch-server
+      dockerfile: Dockerfile
+    container_name: wewatch_backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./we-wactch-server/.env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./we-watch-client
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=https://api.we-watch.live
+        - NEXT_PUBLIC_SOCKET_URL=https://api.we-watch.live
+        - NEXT_PUBLIC_LIVEKIT_URL=wss://wewatch-8xpwiv2g.livekit.cloud
+        - NEXT_PUBLIC_GIF_API_KEY=tQiltfs9RVp6JTBIj7M3xCC28Ddsd2R5
+        - NEXT_PUBLIC_GIF_PROVIDER=giphy
+    container_name: wewatch_frontend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./we-watch-client/.env
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    container_name: wewatch_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis_data:

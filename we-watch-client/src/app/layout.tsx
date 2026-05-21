@@ -5,6 +5,7 @@ import Footer from '../components/Footer';
 import ScrollToTop from '../components/ScrollToTop';
 import { Toaster } from 'sonner';
 import { SEO } from '../lib/seo';
+import Providers from '../components/Providers';
 
 const inter = Inter({
   subsets: ['latin', 'vietnamese'],
@@ -55,11 +56,13 @@ export default function RootLayout({
       lang="vi"
       className={`${inter.variable} ${overpassMono.variable} text-slate-200 antialiased`}
     >
-      <body className="flex min-h-screen flex-col overflow-x-hidden font-sans">
-        <main className="flex-1">{children}</main>
-        <Footer />
-        <ScrollToTop />
-        <Toaster theme="dark" richColors position="top-right" />
+      <body className="flex min-h-screen flex-col overflow-x-hidden font-sans" suppressHydrationWarning>
+        <Providers>
+          <main className="flex-1">{children}</main>
+          <Footer />
+          <ScrollToTop />
+          <Toaster theme="dark" richColors position="top-right" />
+        </Providers>
       </body>
     </html>
   );

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PROTECTED_ROUTES = ['/rooms', '/profile', '/videos'];
+const PROTECTED_ROUTES = ['/rooms', '/profile', '/videos', '/private', '/community'];
 
 const AUTH_ROUTES = ['/login', '/register'];
 
@@ -9,6 +9,7 @@ export function proxy(request: NextRequest) {
   const token = request.cookies.get('token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
   const { pathname } = request.nextUrl;
+
 
   // 1. Bảo vệ trang Admin - Chỉ cho phép role là 'admin'
   if (pathname.startsWith('/admin')) {
@@ -23,22 +24,25 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 2. Nếu chưa login và truy cập trang private (rooms, profile, videos) -> Redirect sang /login
+  // 2. Nếu chưa login và truy cập trang bảo vệ -> Redirect sang /login
   const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
 
   if (isProtectedRoute && !token) {
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('callbackUrl', pathname);
+    // Lưu lại cả pathname và search (query params) để không mất ?subGroup=...
+    const fullPath = pathname + request.nextUrl.search;
+    loginUrl.searchParams.set('callbackUrl', fullPath);
     return NextResponse.redirect(loginUrl);
   }
 
-  // 3. Nếu đã login và truy cập trang auth (login/register) -> Redirect về Home
+  // 3. Nếu đã login và truy cập trang auth (login/register) -> Redirect về callbackUrl hoặc Home
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname.startsWith(route));
 
   if (isAuthRoute && token) {
-    return NextResponse.redirect(new URL('/', request.url));
+    const callbackUrl = request.nextUrl.searchParams.get('callbackUrl');
+    return NextResponse.redirect(new URL(callbackUrl || '/', request.url));
   }
 
   return NextResponse.next();

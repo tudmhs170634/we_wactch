@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { toast } from 'sonner';
 
 const api = axios.create({
-  baseURL: process.env.BASE_URL || 'http://localhost:3000',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000',
 });
 
 api.interceptors.request.use((config) => {
@@ -28,13 +28,11 @@ api.interceptors.response.use(
       'An unexpected error occurred';
 
     if (error.response?.status === 401) {
-      toast.error('Session expired. Please log in again.');
+      toast.error('Session expired. Please log in again.', { id: 'session-expired' });
       useAuthStore.getState().logout();
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
-    } else {
-      toast.error(message);
     }
     
     return Promise.reject(error);

@@ -1,0 +1,36 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - client-server
+      - trungnt
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ vars.HOST }}
+          username: ${{ vars.USERNAME }}
+          key: ${{ vars.KEY }}
+          script: |
+            export PATH=$PATH:/usr/local/bin
+            cd ~/we_wactch
+
+            echo "--- Start Deploying from branch: ${{ github.ref_name }} ---"
+            
+            # Cập nhật code mới nhất từ nhánh vừa push
+            git fetch origin ${{ github.ref_name }}
+            git checkout ${{ github.ref_name }} || git checkout -b ${{ github.ref_name }} origin/${{ github.ref_name }}
+            git reset --hard origin/${{ github.ref_name }}
+
+            # Build và chạy Docker
+            # Thêm --remove-orphans để dọn dẹp các container cũ không còn dùng
+            docker compose up -d --build --remove-orphans
+
+            # Dọn dẹp các image rác để tránh đầy ổ cứng VPS
+            docker image prune -f
+
+            echo "--- Deployment Finished ---"

@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from 'cloudinary';
+import {
+  v2 as cloudinary,
+  UploadApiResponse,
+  UploadApiErrorResponse,
+} from 'cloudinary';
 import * as streamifier from 'streamifier';
 
 @Injectable()
@@ -12,7 +16,7 @@ export class UploadService {
    */
   async uploadFile(
     file: Express.Multer.File,
-    folder: string = 'we-watch-v2'
+    folder: string = 'we-watch-v2',
   ): Promise<UploadApiResponse | UploadApiErrorResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
@@ -21,7 +25,10 @@ export class UploadService {
         },
         (error, result) => {
           if (error || !result) {
-            return reject(error || new Error('Cloudinary upload failed: Result is undefined'));
+            return reject(
+              error ||
+                new Error('Cloudinary upload failed: Result is undefined'),
+            );
           }
           resolve(result);
         },
@@ -35,13 +42,34 @@ export class UploadService {
    * Helper to specifically upload thumbnails or other specific types if needed
    */
   async uploadThumbnail(file: Express.Multer.File) {
-    return this.uploadFile(file, 'thumbnails');
+    return new Promise<UploadApiResponse | UploadApiErrorResponse>(
+      (resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'thumbnails',
+            format: 'webp',
+            transformation: [
+              { width: 1280, height: 720, crop: 'fill', gravity: 'center' },
+              { quality: 'auto:good' },
+            ],
+          },
+          (error, result) => {
+            if (error || !result)
+              return reject(error || new Error('Upload failed'));
+            resolve(result);
+          },
+        );
+        streamifier.createReadStream(file.buffer).pipe(uploadStream);
+      },
+    );
   }
 
   /**
    * Uploads a file with a temporary tag for pre-upload flow.
    */
-  async uploadTemporary(file: Express.Multer.File): Promise<UploadApiResponse | UploadApiErrorResponse> {
+  async uploadTemporary(
+    file: Express.Multer.File,
+  ): Promise<UploadApiResponse | UploadApiErrorResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
@@ -69,6 +97,6 @@ export class UploadService {
   }
 
   async uploadAvatar(file: Express.Multer.File) {
-      return this.uploadFile(file, 'avatars');
+    return this.uploadFile(file, 'avatars');
   }
 }

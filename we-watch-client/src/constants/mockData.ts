@@ -287,7 +287,7 @@ export const MOCK_TESTIMONIALS = [
   {
     id: 1,
     name: 'Nguyễn Văn A',
-    content: 'Trải nghiệm xem phim cùng bạn bè tuyệt vời nhất mà mình từng thử nghiệm. Cảm giác như đang ngồi chung một phòng khách!',
+    content: 'Trải nghiệm xem video cùng bạn bè tuyệt vời nhất mà mình từng thử nghiệm. Cảm giác như đang ngồi chung một phòng khách!',
     avatar: 'https://i.pravatar.cc/150?u=123',
     rating: 5,
   },
