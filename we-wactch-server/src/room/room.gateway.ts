@@ -8,9 +8,7 @@ import {
     MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
-import { WsThrottlerGuard } from '../utils/ws-throttler.guard';
+import { Logger } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -511,8 +509,6 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     // ─── Chat ───────────────────────────────────────────────────────────────
 
     @SubscribeMessage('sendMessage')
-    @UseGuards(WsThrottlerGuard)
-    @Throttle({ wsChat: { limit: 3, ttl: 2000 } })
     async handleSendMessage(
         @ConnectedSocket() client: Socket,
         @MessageBody() data: { roomId: string; message: string; username: string; avatarUrl?: string },
@@ -673,8 +669,6 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     // ─── Emoji Reaction ─────────────────────────────────────────────────────
 
     @SubscribeMessage('sendEmoji')
-    @UseGuards(WsThrottlerGuard)
-    @Throttle({ wsEmoji: { limit: 10, ttl: 5000 } })
     handleSendEmoji(
         @ConnectedSocket() _client: Socket,
         @MessageBody() data: { roomId: string; emoji: string; username: string; x?: number },
@@ -695,8 +689,6 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
     // ─── Video Synchronization ──────────────────────────────────────────────
 
     @SubscribeMessage('videoAction')
-    @UseGuards(WsThrottlerGuard)
-    @Throttle({ wsAction: { limit: 2, ttl: 3000 } })
     async handleVideoAction(
         @ConnectedSocket() client: Socket,
         @MessageBody() data: { roomId: string; action: 'play' | 'pause' | 'seek'; currentTime: number; sentAt: number },

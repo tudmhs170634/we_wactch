@@ -9,7 +9,6 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
 import { VideoService } from './video.service';
 import { CreateVideoDto } from './dto/create-video.dto';
 import { UpdateVideoDto } from './dto/update-video.dto';
@@ -27,7 +26,6 @@ export class VideoController {
   ) {}
 
   @Post('presigned-url')
-  @Throttle({ upload: { limit: 10, ttl: 60000 } })
   @UseGuards(JwtAuthGuard)
   getPresignedUrl(@Body('mimeType') mimeType: string) {
     return this.videoService.getPresignedUrl(mimeType);
