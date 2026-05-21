@@ -68,7 +68,7 @@ export const useSocket = (
     // Khởi tạo audio objects
     joinAudioRef.current = new Audio('/join.wav');
     leaveAudioRef.current = new Audio('/out.wav');
-    
+
     if (joinAudioRef.current) joinAudioRef.current.volume = 0.5;
     if (leaveAudioRef.current) leaveAudioRef.current.volume = 0.5;
   }, []);
@@ -113,7 +113,7 @@ export const useSocket = (
         role: user.role,
         password: password,
       });
-     // ── NTP-lite Clock Sync: 3 rounds of ping-pong ──
+      // ── NTP-lite Clock Sync: 3 rounds of ping-pong ──
       timeSyncSamples.current = [];
       for (let i = 0; i < 3; i++) {
         setTimeout(() => {
@@ -149,8 +149,8 @@ export const useSocket = (
 
     socket.on('userJoined', (member: RoomMember) => {
       // Phát tiếng vào phòng
-      joinAudioRef.current?.play().catch(() => {});
-      
+      joinAudioRef.current?.play().catch(() => { });
+
       setMembers((prev) => {
         if (prev.find((m) => m.username === member.username)) return prev;
         return [...prev, member];
@@ -159,7 +159,7 @@ export const useSocket = (
 
     socket.on('userLeft', (username: string) => {
       // Phát tiếng rời phòng
-      leaveAudioRef.current?.play().catch(() => {});
+      leaveAudioRef.current?.play().catch(() => { });
 
       setMembers((prev) => prev.filter((m) => m.username !== username));
     });
@@ -202,10 +202,11 @@ export const useSocket = (
       setTimeout(() => setWishlistError(null), 3000);
     });
 
-    socket.on('hostTransferred', ({ newHostId, newHostUsername }: { newHostName: string, newHostId: string, newHostUsername: string }) => {
+    socket.on('hostTransferred', ({ newHostId, newHostUsername, newHostName }: { newHostName?: string, newHostId: string, newHostUsername?: string }) => {
       setCurrentHostId(newHostId);
-      if (newHostUsername) {
-        setCurrentHostUsername(newHostUsername);
+      const name = newHostUsername || newHostName;
+      if (name) {
+        setCurrentHostUsername(name);
       }
     });
 
@@ -249,7 +250,7 @@ export const useSocket = (
       setTimeout(() => setChatMuteInfo(null), 4000);
     });
 
-    
+
     socket.on('hostMediaStateUpdate', (state: { mic: boolean; cam: boolean }) => {
       setHostMediaState(state);
     });
@@ -345,7 +346,7 @@ export const useSocket = (
     [roomId],
   );
 
-   const playVideoFromWishlist = useCallback(
+  const playVideoFromWishlist = useCallback(
     (videoId: string) => {
       if (!socketRef.current || !roomId) return;
       socketRef.current.emit('playVideoFromWishlist', { roomId, videoId });
