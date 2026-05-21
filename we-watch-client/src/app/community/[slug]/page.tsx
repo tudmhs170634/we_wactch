@@ -2105,11 +2105,11 @@ const ChatList = React.memo(({
                               : 'text-white/90'
                           }`}
                         >
-                          {msg.message.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ||
-                          msg.message.includes('cloudinary.com') ||
-                          msg.message.includes('giphy.com') ||
-                          msg.message.includes('tenor.com') ||
-                          msg.message.includes('tenor.googleapis.com') ? (
+                          {msg.message?.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ||
+                          msg.message?.includes('cloudinary.com') ||
+                          msg.message?.includes('giphy.com') ||
+                          msg.message?.includes('tenor.com') ||
+                          msg.message?.includes('tenor.googleapis.com') ? (
                             <img
                               src={msg.message}
                               alt="media"

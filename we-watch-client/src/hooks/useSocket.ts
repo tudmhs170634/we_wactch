@@ -171,21 +171,30 @@ export const useSocket = (
 
     // ── Chat ─────────────────────────────────────────────────────────────────
     socket.on('chatHistory', (history: ChatMessage[]) => {
-      setMessages(history);
+      if (Array.isArray(history)) {
+        const valid = history.filter((msg) => msg && typeof msg.message === 'string');
+        setMessages(valid);
+      } else {
+        setMessages([]);
+      }
     });
 
     socket.on('newMessage', (msg: ChatMessage) => {
-      setMessages((prev) => [...prev, msg]);
+      if (msg && typeof msg.message === 'string') {
+        setMessages((prev) => [...prev, msg]);
+      }
     });
 
     // ── Emoji Reactions ──────────────────────────────────────────────────────
     socket.on('emojiReaction', (event: EmojiEvent) => {
-      const localId = Date.now() + Math.random();
-      const enriched = { ...event, localId };
-      setEmojis((prev) => [...prev, enriched]);
-      setTimeout(() => {
-        setEmojis((prev) => prev.filter((e) => e.localId !== localId));
-      }, 2500);
+      if (event && event.emoji) {
+        const localId = Date.now() + Math.random();
+        const enriched = { ...event, localId };
+        setEmojis((prev) => [...prev, enriched]);
+        setTimeout(() => {
+          setEmojis((prev) => prev.filter((e) => e.localId !== localId));
+        }, 2500);
+      }
     });
 
     // ── Wishlist ─────────────────────────────────────────────────────────────
