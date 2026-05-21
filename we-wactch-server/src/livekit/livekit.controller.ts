@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Query, UseGuards, Param, Res, Req } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { LiveKitService } from './livekit.service';
 import { JwtAuthGuard } from '../auth/guard/jwt-auth.guard';
 import { GetUser } from '../auth/decorator/get-user.decorator';
@@ -9,6 +10,7 @@ export class LiveKitController {
   constructor(private readonly livekitService: LiveKitService) {}
 
   @Get('token')
+  @Throttle({ livekit: { limit: 10, ttl: 60000 } })
   @UseGuards(JwtAuthGuard)
   async getToken(
     @Query('roomName') roomName: string,
@@ -20,6 +22,7 @@ export class LiveKitController {
   }
 
   @Get('subgroup-token')
+  @Throttle({ livekit: { limit: 10, ttl: 60000 } })
   @UseGuards(JwtAuthGuard)
   async getSubGroupToken(
     @Query('roomId') roomId: string,

@@ -2,6 +2,7 @@ import {
     Controller, Get, Post, Patch, Delete,
     Body, Param, Query, UseGuards, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { RoomService } from './room.service';
@@ -16,6 +17,7 @@ export class RoomController {
 
   /** POST /rooms — Tạo phòng mới (cần login) */
   @Post()
+  @Throttle({ rooms: { limit: 10, ttl: 60000 } })
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(
     FileInterceptor('image', {
@@ -61,6 +63,7 @@ export class RoomController {
 
   /** POST /rooms/:id/verify — Kiểm tra mật khẩu phòng private */
   @Post(':id/verify')
+  @Throttle({ verify: { limit: 5, ttl: 60000 } })
   @UseGuards(JwtAuthGuard)
   verify(@Param('id') id: string, @Body('password') password: string) {
     return this.roomService.verifyPassword(id, password);
