@@ -202,10 +202,21 @@ export const useSocket = (
       setTimeout(() => setWishlistError(null), 3000);
     });
 
-    socket.on('hostTransferred', ({ newHostId, newHostUsername }: { newHostName: string, newHostId: string, newHostUsername: string }) => {
+    socket.on('hostTransferred', ({ newHostId, newHostName }: { newHostName: string, newHostId: string }) => {
       setCurrentHostId(newHostId);
-      if (newHostUsername) {
-        setCurrentHostUsername(newHostUsername);
+      if (newHostName) {
+        setCurrentHostUsername(newHostName);
+      }
+      
+      if (newHostId === user?.id) {
+        toast.success('Bạn đã được chuyển quyền làm Host!', {
+          description: 'Bạn hiện có toàn quyền điều khiển phòng.',
+          duration: 5000,
+        });
+      } else {
+        toast.info(`Quyền Host đã được chuyển cho ${newHostName}.`, {
+          duration: 4000,
+        });
       }
     });
 
@@ -407,7 +418,6 @@ export const useSocket = (
     videoState,
     lastVideoAction,
     videoChangeTrigger,
-    currentHostId,
     setCurrentHostId,
     mutedUsers,
     chatMuteInfo,

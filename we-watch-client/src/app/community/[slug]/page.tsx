@@ -825,6 +825,11 @@ export default function CommunityRoomPage({
       // Build invite link with subGroup param
       const inviteUrl = `${window.location.origin}/community/${params.slug}?subGroup=${newId}`;
       navigator.clipboard.writeText(inviteUrl);
+      
+      // Update creator's URL with the subgroup ID
+      const newUrl = `${window.location.pathname}?subGroup=${newId}`;
+      window.history.replaceState({}, '', newUrl);
+
       toast.success('Đã sao chép link mời bạn bè!');
     } catch (err) {
       toast.error('Không thể tạo link mời. Vui lòng thử lại.');
@@ -1395,6 +1400,7 @@ export default function CommunityRoomPage({
               setContextMenu={setContextMenu}
               setSelectedImage={setSelectedImage}
               chatScrollRef={chatScrollRef}
+              effectiveHostUsername={effectiveHostUsername}
             />
 
             <div
@@ -1931,6 +1937,7 @@ interface ChatListProps {
   setContextMenu: (menu: any) => void;
   setSelectedImage: (img: string) => void;
   chatScrollRef: React.RefObject<HTMLDivElement | null>;
+  effectiveHostUsername: string | null;
 }
 
 const ChatList = React.memo(({
@@ -1945,6 +1952,7 @@ const ChatList = React.memo(({
   setContextMenu,
   setSelectedImage,
   chatScrollRef,
+  effectiveHostUsername,
 }: ChatListProps) => {
   return (
     <div

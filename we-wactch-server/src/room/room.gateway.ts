@@ -118,9 +118,10 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         });
         const isHost = room?.hostId === userId;
         
-        // Nếu ngắt kết nối do timeout (sập máy/mất mạng) thì không cần chờ delay, xóa ngay
+        // Nếu là Host: luôn chờ 20 giây (20000 ms) dưới mọi lý do ngắt kết nối.
+        // Ngược lại, nếu là viewer: ngắt kết nối do timeout/error thì 0s, bình thường thì 5s.
         const isHardDisconnect = reason === 'ping timeout' || reason === 'transport error';
-        const delay = isHardDisconnect ? 0 : (isHost ? 30000 : 5000);
+        const delay = isHost ? 20000 : (isHardDisconnect ? 0 : 5000);
 
         // Thiết lập chờ xử lý rời phòng
         const pendingKey = `${roomId}:${username}`;
@@ -161,128 +162,105 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
             if (isHost) {
                 const remainingMembers = await this.getRoomMembers(roomId);
                 
-                // Nếu là phòng cộng đồng (public/community) -> Đóng phòng luôn nếu host out 30s
-                if (room?.type === 'public') {
-                    this.logger.log(`Community room ${roomId} auto-deactivating as host ${username} left.`);
+                if (remainingMembers.length === 0) {
+                    this.logger.log(`Room ${roomId} auto-deactivating as host ${username} left and no one remains.`);
                     
                     // Thông báo kết thúc phòng
                     this.server.to(roomId).emit('roomEnded');
                     
-                    // Deactivate trong DB
-                    try {
-                        await this.prisma.room.update({
-                            where: { id: roomId },
-                            data: { isActive: false }
-                        });
-                    } catch (err: any) {
-                        if (err?.code === 'P2025') {
-                            this.logger.warn(`Room ${roomId} was already deleted before disconnect grace period resolved. Skipping deactivation.`);
-                        } else {
-                            throw err;
-                        }
-                    }
-
-                    // Clear cache
-                    await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${room.slug}`);
-                    await this.redis.delPattern(`ww:room:${roomId}:*`);
-                    
-                    const listKeys = await this.redis.keys('rooms:list:*');
-                    if (listKeys.length > 0) {
-                        await Promise.all(listKeys.map(k => this.redis.del(k)));
-                    }
-
-                    this.roomService.roomListUpdated$.next();
-                    return;
-                }
-
-                // Với các loại phòng khác (private, v.v.) -> Transfer host nếu còn người
-                if (remainingMembers.length > 0) {
-                    // Transfer host cho người ở lâu nhất (dựa trên joinAt)
-                    const nextHost = remainingMembers.sort((a, b) => (a.joinAt || 0) - (b.joinAt || 0))[0];
-                    
-                    // Tìm userId của người này từ Redis hoặc socketRoomMap
-                    const keys = await this.redis.keys(`${ROOM_MEMBERS_KEY(roomId)}:socket:*`);
-                    let newHostId = '';
-                    for (const key of keys) {
-                        const mData = await this.redis.get<any>(key);
-                        if (mData?.username === nextHost.username) {
-                            newHostId = mData.userId;
-                            break;
-                        }
-                    }
-
-                    if (newHostId) {
-                        let updatedRoom;
-                        try {
-                            updatedRoom = await this.prisma.room.update({
-                                where: { id: roomId },
-                                data: { hostId: newHostId },
-                                include: { host: true }
-                            });
-                        } catch (err: any) {
-                            if (err?.code === 'P2025') {
-                                this.logger.warn(`Room ${roomId} was already deleted before host transfer. Skipping.`);
-                                return;
-                            } else {
-                                throw err;
-                            }
-                        }
-
-                        // Clear cache for this room
-                        await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${updatedRoom.slug}`);
-                        const listKeys = await this.redis.keys('rooms:list:*');
-                        if (listKeys.length > 0) {
-                            await Promise.all(listKeys.map(k => this.redis.del(k)));
-                        }
-
-                        // Thông báo chuyển giao host kèm theo thông báo hệ thống
-                        this.server.to(roomId).emit('hostTransferred', { 
-                            newHostName: nextHost.username,
-                            newHostId: newHostId
-                        });
-
-                        // Notify global list to refresh (so "My Rooms" updates)
-                        this.roomService.roomListUpdated$.next();
-
-                        const transferMsg: ChatMessage = {
-                            id: `sys_transfer_${Date.now()}`,
-                            roomId,
-                            username: 'system',
-                            message: `Chủ phòng mới: ${nextHost.username}`,
-                            type: 'status',
-                            timestamp: Date.now(),
-                        };
-                        this.server.to(roomId).emit('newMessage', transferMsg);
-
-                        this.logger.log(`Host transferred from ${username} to ${nextHost.username} in room ${roomId}`);
-                    }
-                } else {
-                    // Phòng trống -> isActive = false
-                   // Dùng try-catch để xử lý trường hợp phòng đã bị xóa bởi admin (P2025)
                     try {
                         const updatedRoom = await this.prisma.room.update({
                             where: { id: roomId },
                             data: { isActive: false }
                         });
                         
-                        // Clear cache for this room
+                        // Clear cache
                         await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${updatedRoom.slug}`);
+                        await this.redis.delPattern(`ww:room:${roomId}:*`);
+                        
                         const listKeys = await this.redis.keys('rooms:list:*');
                         if (listKeys.length > 0) {
                             await Promise.all(listKeys.map(k => this.redis.del(k)));
                         }
-                        
-                        // Notify list update
+
                         this.roomService.roomListUpdated$.next();
-                        this.logger.log(`Room ${roomId} deactivated because host ${username} left and no one remains.`);
                     } catch (err: any) {
                         if (err?.code === 'P2025') {
-                            // Phòng đã bị xóa trước đó (vd: admin terminate) — bỏ qua
                             this.logger.warn(`Room ${roomId} was already deleted before disconnect grace period resolved. Skipping deactivation.`);
                         } else {
                             throw err;
                         }
                     }
+                    return;
+                }
+
+                // Nếu còn người -> Transfer host cho người ở lâu nhất (dựa trên joinAt)
+                const nextHost = remainingMembers.sort((a, b) => (a.joinAt || 0) - (b.joinAt || 0))[0];
+                
+                // Tìm userId của người này từ Redis hoặc socketRoomMap
+                const keys = await this.redis.keys(`${ROOM_MEMBERS_KEY(roomId)}:socket:*`);
+                let newHostId = '';
+                for (const key of keys) {
+                    const mData = await this.redis.get<any>(key);
+                    if (mData?.username === nextHost.username) {
+                        newHostId = mData.userId;
+                        break;
+                    }
+                }
+
+                if (!newHostId) {
+                    const socketMember = Array.from(this.socketRoomMap.values()).find(
+                        s => s.roomId === roomId && s.username === nextHost.username
+                    );
+                    if (socketMember) {
+                        newHostId = socketMember.userId;
+                    }
+                }
+
+                if (newHostId) {
+                    let updatedRoom;
+                    try {
+                        updatedRoom = await this.prisma.room.update({
+                            where: { id: roomId },
+                            data: { hostId: newHostId },
+                            include: { host: true }
+                        });
+                    } catch (err: any) {
+                        if (err?.code === 'P2025') {
+                            this.logger.warn(`Room ${roomId} was already deleted before host transfer. Skipping.`);
+                            return;
+                        } else {
+                            throw err;
+                        }
+                    }
+
+                    // Clear cache for this room
+                    await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${updatedRoom.slug}`);
+                    const listKeys = await this.redis.keys('rooms:list:*');
+                    if (listKeys.length > 0) {
+                        await Promise.all(listKeys.map(k => this.redis.del(k)));
+                    }
+
+                    // Thông báo chuyển giao host kèm theo thông báo hệ thống
+                    this.server.to(roomId).emit('hostTransferred', { 
+                        newHostName: nextHost.username,
+                        newHostId: newHostId
+                    });
+
+                    // Notify global list to refresh (so "My Rooms" updates)
+                    this.roomService.roomListUpdated$.next();
+
+                    const transferMsg: ChatMessage = {
+                        id: `sys_transfer_${Date.now()}`,
+                        roomId,
+                        username: 'system',
+                        message: `Chủ phòng mới: ${nextHost.username}`,
+                        type: 'status',
+                        timestamp: Date.now(),
+                    };
+                    this.server.to(roomId).emit('newMessage', transferMsg);
+
+                    this.logger.log(`Host transferred from ${username} to ${nextHost.username} in room ${roomId}`);
                 }
             }
 
