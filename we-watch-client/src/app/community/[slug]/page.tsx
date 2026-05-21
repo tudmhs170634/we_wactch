@@ -696,8 +696,7 @@ export default function CommunityRoomPage({
 
   const spawnEmoji = (emoji: string) => {
     sendEmoji(emoji);
-    // Phát event cho LiveKitControls/GlobalReactions gửi qua LiveKit
-    window.dispatchEvent(new CustomEvent('trigger-reaction', { detail: { emoji } }));
+    // Socket.io broadcasts emojiReaction to all clients (including sender) via useSocket
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -851,6 +850,9 @@ export default function CommunityRoomPage({
       // Build invite link with subGroup param
       const inviteUrl = `${window.location.origin}/community/${params.slug}?subGroup=${newId}`;
       navigator.clipboard.writeText(inviteUrl);
+      // Update creator's URL to include subGroup param so reload doesn't kick them out
+      const newUrl = `${window.location.pathname}?subGroup=${newId}`;
+      window.history.replaceState({}, '', newUrl);
       toast.success('Đã sao chép link mời bạn bè!');
     } catch (err) {
       toast.error('Không thể tạo link mời. Vui lòng thử lại.');
@@ -1326,6 +1328,24 @@ export default function CommunityRoomPage({
                 <span className="text-xs font-bold text-white">
                   {socketMembers.length}
                 </span>
+              </div>
+
+              {/* Floating Emojis Layer */}
+              <div className="pointer-events-none absolute inset-0 overflow-hidden z-30">
+                <AnimatePresence>
+                  {emojis.map((e) => (
+                    <motion.div
+                      key={e.localId}
+                      initial={{ opacity: 1, y: 80, x: `${e.x}%`, scale: 0.5 }}
+                      animate={{ opacity: 0, y: -100, x: `${e.x}%`, scale: 1.8 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 4.5, ease: 'easeOut' }}
+                      className="absolute bottom-16 text-2xl"
+                    >
+                      {e.emoji}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             </div>
 
@@ -2085,8 +2105,11 @@ const ChatList = React.memo(({
                               : 'text-white/90'
                           }`}
                         >
-                          {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
-                          msg.message.includes('cloudinary.com') ? (
+                          {msg.message.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ||
+                          msg.message.includes('cloudinary.com') ||
+                          msg.message.includes('giphy.com') ||
+                          msg.message.includes('tenor.com') ||
+                          msg.message.includes('tenor.googleapis.com') ? (
                             <img
                               src={msg.message}
                               alt="media"

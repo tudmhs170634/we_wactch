@@ -482,7 +482,8 @@ export function LiveKitProvider({
       className="flex h-full w-full flex-col"
     >
       {children}
-      <GlobalReactions />
+      {/* Disable laggy LiveKit reactions in favor of Socket.io and Framer Motion reactions */}
+      {/* <GlobalReactions /> */}
       {streamMode && <StreamSettingsUpdater mode={streamMode} />}
       {!audioMuted && <RoomAudioRenderer />}
     </LKRoom>

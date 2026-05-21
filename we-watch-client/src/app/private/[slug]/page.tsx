@@ -1123,10 +1123,11 @@ export default function WeWatchRoomPage({
                                 : 'text-white/90'
                             }`}
                           >
-                            {msg.message.match(/\.(jpeg|jpg|gif|png|webp)$/i) ||
+                            {msg.message.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ||
                             msg.message.includes('cloudinary.com') ||
                             msg.message.includes('giphy.com') ||
-                            msg.message.includes('tenor.com') ? (
+                            msg.message.includes('tenor.com') ||
+                            msg.message.includes('tenor.googleapis.com') ? (
                               <div
                                 className="relative mt-1 cursor-zoom-in overflow-hidden rounded-lg transition-opacity hover:opacity-90"
                                 onClick={() => setSelectedImage(msg.message)}
