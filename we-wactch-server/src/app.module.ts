@@ -26,7 +26,7 @@ import { ReportModule } from './report/report.module';
       {
         name: 'default',
         ttl: 60000,
-        limit: 60,
+        limit: 120,
       },
       {
         name: 'auth',
