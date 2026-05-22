@@ -41,6 +41,7 @@ interface VideoPlayerProps {
   onGoLive?: () => void;
   initialSeek?: number;
   liveSessionDuration?: number;
+  hideLiveBadge?: boolean;
 }
 
 export default function VideoPlayer({
@@ -56,6 +57,7 @@ export default function VideoPlayer({
   onGoLive,
   initialSeek,
   liveSessionDuration,
+  hideLiveBadge = false,
 }: VideoPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -460,7 +462,10 @@ export default function VideoPlayer({
         onTimeUpdate={() => {
           const v = ref.current;
           if (v && !v.seeking && !isDragging) {
-            // Không cập nhật currentWatchTime ở đây để thanh đỏ đứng im tại mốc thời gian đã click!
+            setProgress(v.currentTime / (v.duration || 1));
+            if (liveSessionDuration) {
+              setCurrentWatchTime(v.currentTime);
+            }
             onProgressUpdate?.(v.currentTime, v.duration);
           }
         }}
@@ -524,14 +529,16 @@ export default function VideoPlayer({
             </button>
             
             {/* Live Badge (Trạng thái đang tua) */}
-            <button 
-              onClick={onGoLive}
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 cursor-pointer hover:bg-white/10 transition-colors"
-              title="Bấm để quay lại Live"
-            >
-              <div className="h-2 w-2 rounded-full bg-gray-400" />
-              <span className="text-xs font-bold text-white/70">LIVE</span>
-            </button>
+            {!hideLiveBadge && (
+              <button 
+                onClick={onGoLive}
+                className="flex items-center gap-1.5 rounded-md px-2 py-1 cursor-pointer hover:bg-white/10 transition-colors"
+                title="Bấm để quay lại Live"
+              >
+                <div className="h-2 w-2 rounded-full bg-gray-400" />
+                <span className="text-xs font-bold text-white/70">LIVE</span>
+              </button>
+            )}
 
             <span className="flex-1"></span>
 

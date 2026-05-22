@@ -749,10 +749,11 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         if (!currentRoom || !currentRoom.videoId) {
             
             // Cập nhật Database
-            await this.prisma.room.update({
+            const updatedRoom = await this.prisma.room.update({
                 where: { id: roomId },
                 data: { videoId: video.id }
             });
+            await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${updatedRoom.slug}`);
 
             // Xóa trạng thái video cũ trong Redis để bắt đầu từ 0
             await this.redis.del(ROOM_VIDEO_STATE_KEY(roomId));
@@ -864,10 +865,11 @@ export class RoomGateway implements OnGatewayConnection, OnGatewayDisconnect, On
         }
 
         // 3. Cập nhật Database
-        await this.prisma.room.update({
+        const updatedRoom = await this.prisma.room.update({
             where: { id: roomId },
             data: { videoId: videoToPlay.id }
         });
+        await this.redis.del(`rooms:item:${roomId}`, `rooms:slug:${updatedRoom.slug}`);
 
         // 4. Xóa phim này khỏi wishlist
         const filtered = existing.filter(v => v.id !== videoId);

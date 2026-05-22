@@ -48,8 +48,8 @@ const AuthForm: React.FC<AuthFormProps> = ({
   const [isLogin, setIsLogin] = useState(initialMode === 'login');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState('user@gmail.com');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(AVATARS[0]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
