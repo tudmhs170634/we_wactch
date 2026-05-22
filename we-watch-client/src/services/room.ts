@@ -38,9 +38,7 @@ export const createRoom = async (payload: CreateRoomPayload) => {
   if (payload.imageUrl) form.append('imageUrl', payload.imageUrl);
   if (payload.imageFile) form.append('image', payload.imageFile);
 
-  const { data } = await api.post('/rooms', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const { data } = await api.post('/rooms', form);
   return data;
 };
 
