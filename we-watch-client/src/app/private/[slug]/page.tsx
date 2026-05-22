@@ -673,6 +673,7 @@ export default function WeWatchRoomPage({
                     {libraryFilms.map((film) => (
                       <div
                         key={film.id}
+                        onClick={() => handleAddToRequest(film)}
                         className="group relative flex cursor-pointer items-center gap-3 rounded-xl p-2 transition-all hover:bg-white/5"
                       >
                         <div className="relative h-12 w-20 flex-shrink-0 overflow-hidden rounded-lg">
@@ -696,12 +697,9 @@ export default function WeWatchRoomPage({
                               : '--'}
                           </span>
                         </div>
-                        <button
-                          onClick={() => handleAddToRequest(film)}
-                          className="text-[#C800DF] opacity-0 transition-opacity group-hover:opacity-100"
-                        >
+                        <div className="text-[#C800DF] opacity-0 transition-opacity group-hover:opacity-100">
                           <Plus size={14} />
-                        </button>
+                        </div>
                       </div>
                     ))}
 
@@ -890,6 +888,7 @@ export default function WeWatchRoomPage({
                 initialState={videoState}
                 onOffsetChange={setTimeOffset}
                 serverTimeOffset={serverTimeOffset}
+                hideLiveBadge={true}
               />
             ) : room?.video ? (
               <div className="flex h-full w-full animate-pulse items-center justify-center bg-white/5">
